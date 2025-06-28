@@ -1,0 +1,21 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net9.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Silk.Net" Version="2.22.0" />
+    <PackageReference Include="Silk.NET.Vulkan.Extensions.EXT" Version="2.22.0" />
+  </ItemGroup>
+
+	<ItemGroup>
+		<VertexShader Include="../shaders/**/*.vert" />
+		<FragmentShader Include="../shaders/**/*.frag" />
+	</ItemGroup>
+
+</Project>
