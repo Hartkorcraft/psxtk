@@ -144,3 +144,9 @@ obj/Debug/net9.0/psxtk.pdb
 obj/Debug/net9.0/psxtk.sourcelink.json
 obj/Debug/net9.0/ref/psxtk.dll
 obj/Debug/net9.0/refint/psxtk.dll
+obj/project.nuget.cache
+obj/psxtk.csproj.nuget.dgspec.json
+obj/Debug/net9.0/psxtk.AssemblyInfo.cs
+obj/Debug/net9.0/psxtk.AssemblyInfoInputs.cache
+obj/Debug/net9.0/psxtk.assets.cache
+obj/Debug/net9.0/psxtk.GeneratedMSBuildEditorConfig.editorconfig
