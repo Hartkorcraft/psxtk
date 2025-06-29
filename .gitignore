@@ -152,3 +152,4 @@ obj/Debug/net9.0/psxtk.assets.cache
 obj/Debug/net9.0/psxtk.GeneratedMSBuildEditorConfig.editorconfig
 obj
 bin
+.VSCodeCounter
