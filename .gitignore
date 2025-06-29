@@ -131,3 +131,16 @@ $RECYCLE.BIN/
 .DS_Store
 
 _NCrunch*
+bin/Debug/net9.0/psxtk.dll
+bin/Debug/net9.0/psxtk.exe
+bin/Debug/net9.0/psxtk.pdb
+bin/Debug/net9.0/Shaders/vert.spv
+obj/Debug/net9.0/apphost.exe
+obj/Debug/net9.0/psxtk.AssemblyInfo.cs
+obj/Debug/net9.0/psxtk.AssemblyInfoInputs.cache
+obj/Debug/net9.0/psxtk.csproj.CoreCompileInputs.cache
+obj/Debug/net9.0/psxtk.dll
+obj/Debug/net9.0/psxtk.pdb
+obj/Debug/net9.0/psxtk.sourcelink.json
+obj/Debug/net9.0/ref/psxtk.dll
+obj/Debug/net9.0/refint/psxtk.dll
