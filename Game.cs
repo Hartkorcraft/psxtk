@@ -72,6 +72,8 @@ public unsafe class Game
     private Fence[]? imagesInFlight;
     private int currentFrame = 0;
 
+    private bool frameBufferResized = false;
+
     readonly string[] validationLayers =
     [
         "VK_LAYER_KHRONOS_validation"
@@ -106,6 +108,14 @@ public unsafe class Game
         {
             throw new Exception("Windowing platform doesn't support Vulkan.");
         }
+
+        window.Resize += FramebufferResizeCallback;
+
+    }
+
+    void FramebufferResizeCallback(Vector2D<int> obj)
+    {
+        frameBufferResized = true;
     }
 
     void InitVulkan()
@@ -514,6 +524,58 @@ public unsafe class Game
             }
         }
     }
+    void RecreateSwapChain()
+    {
+        Vector2D<int> framebufferSize = window!.FramebufferSize;
+
+        while (framebufferSize.X == 0 || framebufferSize.Y == 0)
+        {
+            framebufferSize = window.FramebufferSize;
+            window.DoEvents();
+        }
+
+        vk!.DeviceWaitIdle(device);
+
+        CleanUpSwapChain();
+
+        CreateSwapChain();
+        CreateImageViews();
+        CreateRenderPass();
+        CreateGraphicsPipeline();
+        CreateFramebuffers();
+        CreateCommandBuffers();
+
+        imagesInFlight = new Fence[swapChainImages!.Length];
+    }
+
+    void CreateCommandBuffers()
+    {
+        throw new NotImplementedException();
+    }
+
+    void CleanUpSwapChain()
+    {
+        foreach (var framebuffer in swapChainFramebuffers!)
+        {
+            vk!.DestroyFramebuffer(device, framebuffer, null);
+        }
+
+        fixed (CommandBuffer* commandBuffersPtr = commandBuffers)
+        {
+            vk!.FreeCommandBuffers(device, commandPool, (uint)commandBuffers!.Length, commandBuffersPtr);
+        }
+
+        vk!.DestroyPipeline(device, graphicsPipeline, null);
+        vk!.DestroyPipelineLayout(device, pipelineLayout, null);
+        vk!.DestroyRenderPass(device, renderPass, null);
+
+        foreach (var imageView in swapChainImageViews!)
+        {
+            vk!.DestroyImageView(device, imageView, null);
+        }
+
+        khrSwapChain!.DestroySwapchain(device, swapChain, null);
+    }
 
     void CreateSwapChain()
     {
@@ -709,7 +771,17 @@ public unsafe class Game
         vk!.WaitForFences(device, 1, in inFlightFences![currentFrame], true, ulong.MaxValue);
 
         uint imageIndex = 0;
-        khrSwapChain!.AcquireNextImage(device, swapChain, ulong.MaxValue, imageAvailableSemaphores![currentFrame], default, ref imageIndex);
+        var result = khrSwapChain!.AcquireNextImage(device, swapChain, ulong.MaxValue, imageAvailableSemaphores![currentFrame], default, ref imageIndex);
+
+        if (result == Result.ErrorOutOfDateKhr)
+        {
+            RecreateSwapChain();
+            return;
+        }
+        else if (result != Result.Success && result != Result.SuboptimalKhr)
+        {
+            throw new Exception("failed to acquire swap chain image!");
+        }
 
         if (imagesInFlight![imageIndex].Handle != default)
         {
@@ -772,6 +844,8 @@ public unsafe class Game
 
     void CleanUp()
     {
+        CleanUpSwapChain();
+
         for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
         {
             vk!.DestroySemaphore(device, renderFinishedSemaphores![i], null);
@@ -781,21 +855,6 @@ public unsafe class Game
 
         vk!.DestroyCommandPool(device, commandPool, null);
 
-        foreach (var framebuffer in swapChainFramebuffers!)
-        {
-            vk!.DestroyFramebuffer(device, framebuffer, null);
-        }
-
-        vk!.DestroyPipeline(device, graphicsPipeline, null);
-        vk!.DestroyPipelineLayout(device, pipelineLayout, null);
-        vk!.DestroyRenderPass(device, renderPass, null);
-
-        foreach (var imageView in swapChainImageViews!)
-        {
-            vk!.DestroyImageView(device, imageView, null);
-        }
-
-        khrSwapChain!.DestroySwapchain(device, swapChain, null);
         vk!.DestroyDevice(device, null);
 
         if (enableValidationLayers)

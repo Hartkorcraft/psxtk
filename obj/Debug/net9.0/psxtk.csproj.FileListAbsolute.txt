@@ -36,3 +36,4 @@ d:\coding\psxtk\obj\Debug\net9.0\psxtk.pdb
 d:\coding\psxtk\obj\Debug\net9.0\psxtk.genruntimeconfig.cache
 d:\coding\psxtk\obj\Debug\net9.0\ref\psxtk.dll
 d:\coding\psxtk\bin\Debug\net9.0\Silk.NET.Vulkan.Extensions.EXT.dll
+d:\coding\psxtk\obj\Debug\net9.0\psxtk.sourcelink.json
