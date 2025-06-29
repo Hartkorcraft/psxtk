@@ -1,4 +1,4 @@
-struct QueueFamilyIndices
+public struct QueueFamilyIndices
 {
     public uint? GraphicsFamily { get; set; }
     public uint? PresentFamily { get; set; }

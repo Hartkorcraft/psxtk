@@ -12,7 +12,7 @@ using Buffer = Silk.NET.Vulkan.Buffer;
 using Image = Silk.NET.Vulkan.Image;
 using Semaphore = Silk.NET.Vulkan.Semaphore;
 
-struct Vertex
+public struct Vertex
 {
     public Vector3D<float> pos;
     public Vector3D<float> color;

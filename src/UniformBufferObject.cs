@@ -12,7 +12,7 @@ using Buffer = Silk.NET.Vulkan.Buffer;
 using Image = Silk.NET.Vulkan.Image;
 using Semaphore = Silk.NET.Vulkan.Semaphore;
 
-struct UniformBufferObject
+public struct UniformBufferObject
 {
     public Matrix4X4<float> model;
     public Matrix4X4<float> view;
