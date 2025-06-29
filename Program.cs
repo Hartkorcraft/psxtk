@@ -219,7 +219,6 @@ unsafe class HelloTriangleApplication
         CreateTextureImage();
         CreateTextureImageView();
         CreateTextureSampler();
-
         CreateVertexBuffer();
         CreateIndexBuffer();
         CreateUniformBuffers();
@@ -227,75 +226,6 @@ unsafe class HelloTriangleApplication
         CreateDescriptorSets();
         CreateCommandBuffers();
         CreateSyncObjects();
-    }
-
-    private void CreateTextureSampler()
-    {
-        vk!.GetPhysicalDeviceProperties(physicalDevice, out PhysicalDeviceProperties properties);
-
-        SamplerCreateInfo samplerInfo = new()
-        {
-            SType = StructureType.SamplerCreateInfo,
-            MagFilter = Filter.Linear,
-            MinFilter = Filter.Linear,
-            AddressModeU = SamplerAddressMode.Repeat,
-            AddressModeV = SamplerAddressMode.Repeat,
-            AddressModeW = SamplerAddressMode.Repeat,
-            AnisotropyEnable = true,
-            MaxAnisotropy = properties.Limits.MaxSamplerAnisotropy,
-            BorderColor = BorderColor.IntOpaqueBlack,
-            UnnormalizedCoordinates = false,
-            CompareEnable = false,
-            CompareOp = CompareOp.Always,
-            MipmapMode = SamplerMipmapMode.Linear,
-        };
-
-        fixed (Sampler* textureSamplerPtr = &textureSampler)
-        {
-            if (vk!.CreateSampler(device, in samplerInfo, null, textureSamplerPtr) != Result.Success)
-            {
-                throw new Exception("failed to create texture sampler!");
-            }
-        }
-    }
-    private void CreateTextureImageView()
-    {
-        textureImageView = CreateImageView(textureImage, Format.R8G8B8A8Srgb);
-    }
-
-    private ImageView CreateImageView(Image image, Format format)
-    {
-        ImageViewCreateInfo createInfo = new()
-        {
-            SType = StructureType.ImageViewCreateInfo,
-            Image = image,
-            ViewType = ImageViewType.Type2D,
-            Format = format,
-            //Components =
-            //    {
-            //        R = ComponentSwizzle.Identity,
-            //        G = ComponentSwizzle.Identity,
-            //        B = ComponentSwizzle.Identity,
-            //        A = ComponentSwizzle.Identity,
-            //    },
-            SubresourceRange =
-                {
-                    AspectMask = ImageAspectFlags.ColorBit,
-                    BaseMipLevel = 0,
-                    LevelCount = 1,
-                    BaseArrayLayer = 0,
-                    LayerCount = 1,
-                }
-
-        };
-
-
-        if (vk!.CreateImageView(device, in createInfo, null, out ImageView imageView) != Result.Success)
-        {
-            throw new Exception("failed to create image views!");
-        }
-
-        return imageView;
     }
 
     private void MainLoop()
@@ -549,6 +479,7 @@ unsafe class HelloTriangleApplication
             SamplerAnisotropy = true,
         };
 
+
         DeviceCreateInfo createInfo = new()
         {
             SType = StructureType.DeviceCreateInfo,
@@ -674,7 +605,6 @@ unsafe class HelloTriangleApplication
             swapChainImageViews[i] = CreateImageView(swapChainImages[i], swapChainImageFormat);
         }
     }
-
 
     private void CreateRenderPass()
     {
@@ -981,6 +911,76 @@ unsafe class HelloTriangleApplication
 
         vk!.DestroyBuffer(device, stagingBuffer, null);
         vk!.FreeMemory(device, stagingBufferMemory, null);
+    }
+
+    private void CreateTextureImageView()
+    {
+        textureImageView = CreateImageView(textureImage, Format.R8G8B8A8Srgb);
+    }
+
+    private void CreateTextureSampler()
+    {
+        vk!.GetPhysicalDeviceProperties(physicalDevice, out PhysicalDeviceProperties properties);
+
+        SamplerCreateInfo samplerInfo = new()
+        {
+            SType = StructureType.SamplerCreateInfo,
+            MagFilter = Filter.Linear,
+            MinFilter = Filter.Linear,
+            AddressModeU = SamplerAddressMode.Repeat,
+            AddressModeV = SamplerAddressMode.Repeat,
+            AddressModeW = SamplerAddressMode.Repeat,
+            AnisotropyEnable = true,
+            MaxAnisotropy = properties.Limits.MaxSamplerAnisotropy,
+            BorderColor = BorderColor.IntOpaqueBlack,
+            UnnormalizedCoordinates = false,
+            CompareEnable = false,
+            CompareOp = CompareOp.Always,
+            MipmapMode = SamplerMipmapMode.Linear,
+        };
+
+        fixed (Sampler* textureSamplerPtr = &textureSampler)
+        {
+            if (vk!.CreateSampler(device, in samplerInfo, null, textureSamplerPtr) != Result.Success)
+            {
+                throw new Exception("failed to create texture sampler!");
+            }
+        }
+    }
+
+    private ImageView CreateImageView(Image image, Format format)
+    {
+        ImageViewCreateInfo createInfo = new()
+        {
+            SType = StructureType.ImageViewCreateInfo,
+            Image = image,
+            ViewType = ImageViewType.Type2D,
+            Format = format,
+            //Components =
+            //    {
+            //        R = ComponentSwizzle.Identity,
+            //        G = ComponentSwizzle.Identity,
+            //        B = ComponentSwizzle.Identity,
+            //        A = ComponentSwizzle.Identity,
+            //    },
+            SubresourceRange =
+                {
+                    AspectMask = ImageAspectFlags.ColorBit,
+                    BaseMipLevel = 0,
+                    LevelCount = 1,
+                    BaseArrayLayer = 0,
+                    LayerCount = 1,
+                }
+
+        };
+
+
+        if (vk!.CreateImageView(device, in createInfo, null, out ImageView imageView) != Result.Success)
+        {
+            throw new Exception("failed to create image views!");
+        }
+
+        return imageView;
     }
 
     private void CreateImage(uint width, uint height, Format format, ImageTiling tiling, ImageUsageFlags usage, MemoryPropertyFlags properties, ref Image image, ref DeviceMemory imageMemory)
