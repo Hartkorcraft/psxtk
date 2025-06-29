@@ -10,6 +10,7 @@
 
   <ItemGroup>
     <PackageReference Include="Silk.Net" Version="2.22.0" />
+    <PackageReference Include="Silk.NET.Assimp" Version="2.22.0" />
     <PackageReference Include="Silk.NET.Vulkan.Extensions.EXT" Version="2.22.0" />
 		<PackageReference Include="SixLabors.ImageSharp">
 		  <Version>3.1.10</Version>
@@ -22,7 +23,16 @@
 	</ItemGroup>
 
 	<ItemGroup>
-	  <Content Include="$(ProjectDir)/Assets\texture.jpg" Link="Textures\texture.jpg">
+	  <Content Include="$(ProjectDir)\Assets\texture.jpg" Link="Textures\texture.jpg">
+	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+	  </Content>
+	</ItemGroup>
+
+	<ItemGroup>
+		<Content Include="$(ProjectDir)\Assets\viking_room.png" Link="Assets\viking_room.png">
+			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+		</Content>
+	  <Content Include="$(ProjectDir)\Assets\viking_room.obj" Link="Assets\viking_room.obj">
 	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
 	  </Content>
 	</ItemGroup>
