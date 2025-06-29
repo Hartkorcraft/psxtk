@@ -8,6 +8,7 @@ using Silk.NET.Vulkan.Extensions.EXT;
 using Silk.NET.Vulkan.Extensions.KHR;
 using Silk.NET.Windowing;
 using Buffer = Silk.NET.Vulkan.Buffer;
+using Image = Silk.NET.Vulkan.Image;
 using Semaphore = Silk.NET.Vulkan.Semaphore;
 
 var app = new HelloTriangleApplication();
@@ -129,16 +130,19 @@ unsafe class HelloTriangleApplication
 
     private CommandPool commandPool;
 
+    private Image textureImage;
+    private DeviceMemory textureImageMemory;
+
     private Buffer vertexBuffer;
     private DeviceMemory vertexBufferMemory;
     private Buffer indexBuffer;
     private DeviceMemory indexBufferMemory;
 
-    private DescriptorPool descriptorPool;
-    private DescriptorSet[]? descriptorSets;
-
     private Buffer[]? uniformBuffers;
     private DeviceMemory[]? uniformBuffersMemory;
+
+    private DescriptorPool descriptorPool;
+    private DescriptorSet[]? descriptorSets;
 
     private CommandBuffer[]? commandBuffers;
 
@@ -210,79 +214,206 @@ unsafe class HelloTriangleApplication
         CreateGraphicsPipeline();
         CreateFramebuffers();
         CreateCommandPool();
+        CreateTextureImage();
         CreateVertexBuffer();
         CreateIndexBuffer();
         CreateUniformBuffers();
         CreateDescriptorPool();
+        CreateDescriptorSets();
         CreateCommandBuffers();
         CreateSyncObjects();
     }
 
-    private void CreateDescriptorPool()
+    private void CreateTextureImage()
     {
-        DescriptorPoolSize poolSize = new()
-        {
-            Type = DescriptorType.UniformBuffer,
-            DescriptorCount = (uint)swapChainImages!.Length,
-        };
+        using var img = SixLabors.ImageSharp.Image.Load<SixLabors.ImageSharp.PixelFormats.Rgba32>("textures/texture.jpg");
 
-        DescriptorPoolCreateInfo poolInfo = new()
-        {
-            SType = StructureType.DescriptorPoolCreateInfo,
-            PoolSizeCount = 1,
-            PPoolSizes = &poolSize,
-            MaxSets = (uint)swapChainImages!.Length,
-        };
+        ulong imageSize = (ulong)(img.Width * img.Height * img.PixelType.BitsPerPixel / 8);
 
-        fixed (DescriptorPool* descriptorPoolPtr = &descriptorPool)
-        {
-            if (vk!.CreateDescriptorPool(device, in poolInfo, null, descriptorPoolPtr) != Result.Success)
-            {
-                throw new Exception("failed to create descriptor pool!");
-            }
+        Buffer stagingBuffer = default;
+        DeviceMemory stagingBufferMemory = default;
+        CreateBuffer(imageSize, BufferUsageFlags.TransferSrcBit, MemoryPropertyFlags.HostVisibleBit | MemoryPropertyFlags.HostCoherentBit, ref stagingBuffer, ref stagingBufferMemory);
 
-        }
+        void* data;
+        vk!.MapMemory(device, stagingBufferMemory, 0, imageSize, 0, &data);
+        img.CopyPixelDataTo(new Span<byte>(data, (int)imageSize));
+        vk!.UnmapMemory(device, stagingBufferMemory);
+
+        CreateImage((uint)img.Width, (uint)img.Height, Format.R8G8B8A8Srgb, ImageTiling.Optimal, ImageUsageFlags.TransferDstBit | ImageUsageFlags.SampledBit, MemoryPropertyFlags.DeviceLocalBit, ref textureImage, ref textureImageMemory);
+
+        TransitionImageLayout(textureImage, Format.R8G8B8A8Srgb, ImageLayout.Undefined, ImageLayout.TransferDstOptimal);
+        CopyBufferToImage(stagingBuffer, textureImage, (uint)img.Width, (uint)img.Height);
+        TransitionImageLayout(textureImage, Format.R8G8B8A8Srgb, ImageLayout.TransferDstOptimal, ImageLayout.ShaderReadOnlyOptimal);
+
+        vk!.DestroyBuffer(device, stagingBuffer, null);
+        vk!.FreeMemory(device, stagingBufferMemory, null);
     }
 
-    private void CreateUniformBuffers()
+    private void CopyBufferToImage(Buffer buffer, Image image, uint width, uint height)
     {
-        ulong bufferSize = (ulong)Unsafe.SizeOf<UniformBufferObject>();
+        CommandBuffer commandBuffer = BeginSingleTimeCommands();
 
-        uniformBuffers = new Buffer[swapChainImages!.Length];
-        uniformBuffersMemory = new DeviceMemory[swapChainImages!.Length];
-
-        for (int i = 0; i < swapChainImages.Length; i++)
+        BufferImageCopy region = new()
         {
-            CreateBuffer(bufferSize, BufferUsageFlags.UniformBufferBit, MemoryPropertyFlags.HostVisibleBit | MemoryPropertyFlags.HostCoherentBit, ref uniformBuffers[i], ref uniformBuffersMemory[i]);
+            BufferOffset = 0,
+            BufferRowLength = 0,
+            BufferImageHeight = 0,
+            ImageSubresource =
+            {
+                AspectMask = ImageAspectFlags.ColorBit,
+                MipLevel = 0,
+                BaseArrayLayer = 0,
+                LayerCount = 1,
+            },
+            ImageOffset = new Offset3D(0, 0, 0),
+            ImageExtent = new Extent3D(width, height, 1),
+
+        };
+
+        vk!.CmdCopyBufferToImage(commandBuffer, buffer, image, ImageLayout.TransferDstOptimal, 1, in region);
+
+        EndSingleTimeCommands(commandBuffer);
+    }
+    private void TransitionImageLayout(Image image, Format format, ImageLayout oldLayout, ImageLayout newLayout)
+    {
+        CommandBuffer commandBuffer = BeginSingleTimeCommands();
+
+        ImageMemoryBarrier barrier = new()
+        {
+            SType = StructureType.ImageMemoryBarrier,
+            OldLayout = oldLayout,
+            NewLayout = newLayout,
+            SrcQueueFamilyIndex = Vk.QueueFamilyIgnored,
+            DstQueueFamilyIndex = Vk.QueueFamilyIgnored,
+            Image = image,
+            SubresourceRange =
+            {
+                AspectMask = ImageAspectFlags.ColorBit,
+                BaseMipLevel = 0,
+                LevelCount = 1,
+                BaseArrayLayer = 0,
+                LayerCount = 1,
+            }
+        };
+
+        PipelineStageFlags sourceStage;
+        PipelineStageFlags destinationStage;
+
+        if (oldLayout == ImageLayout.Undefined && newLayout == ImageLayout.TransferDstOptimal)
+        {
+            barrier.SrcAccessMask = 0;
+            barrier.DstAccessMask = AccessFlags.TransferWriteBit;
+
+            sourceStage = PipelineStageFlags.TopOfPipeBit;
+            destinationStage = PipelineStageFlags.TransferBit;
         }
+        else if (oldLayout == ImageLayout.TransferDstOptimal && newLayout == ImageLayout.ShaderReadOnlyOptimal)
+        {
+            barrier.SrcAccessMask = AccessFlags.TransferWriteBit;
+            barrier.DstAccessMask = AccessFlags.ShaderReadBit;
+
+            sourceStage = PipelineStageFlags.TransferBit;
+            destinationStage = PipelineStageFlags.FragmentShaderBit;
+        }
+        else
+        {
+            throw new Exception("unsupported layout transition!");
+        }
+
+        vk!.CmdPipelineBarrier(commandBuffer, sourceStage, destinationStage, 0, 0, null, 0, null, 1, in barrier);
+
+        EndSingleTimeCommands(commandBuffer);
 
     }
 
-    private void CreateDescriptorSetLayout()
+    private CommandBuffer BeginSingleTimeCommands()
     {
-        DescriptorSetLayoutBinding uboLayoutBinding = new()
+        CommandBufferAllocateInfo allocateInfo = new()
         {
-            Binding = 0,
-            DescriptorCount = 1,
-            DescriptorType = DescriptorType.UniformBuffer,
-            PImmutableSamplers = null,
-            StageFlags = ShaderStageFlags.VertexBit,
+            SType = StructureType.CommandBufferAllocateInfo,
+            Level = CommandBufferLevel.Primary,
+            CommandPool = commandPool,
+            CommandBufferCount = 1,
         };
 
-        DescriptorSetLayoutCreateInfo layoutInfo = new()
+        vk!.AllocateCommandBuffers(device, in allocateInfo, out CommandBuffer commandBuffer);
+
+        CommandBufferBeginInfo beginInfo = new()
         {
-            SType = StructureType.DescriptorSetLayoutCreateInfo,
-            BindingCount = 1,
-            PBindings = &uboLayoutBinding,
+            SType = StructureType.CommandBufferBeginInfo,
+            Flags = CommandBufferUsageFlags.OneTimeSubmitBit,
         };
 
-        fixed (DescriptorSetLayout* descriptorSetLayoutPtr = &descriptorSetLayout)
+        vk!.BeginCommandBuffer(commandBuffer, in beginInfo);
+
+        return commandBuffer;
+    }
+
+    private void EndSingleTimeCommands(CommandBuffer commandBuffer)
+    {
+        vk!.EndCommandBuffer(commandBuffer);
+
+        SubmitInfo submitInfo = new()
         {
-            if (vk!.CreateDescriptorSetLayout(device, in layoutInfo, null, descriptorSetLayoutPtr) != Result.Success)
+            SType = StructureType.SubmitInfo,
+            CommandBufferCount = 1,
+            PCommandBuffers = &commandBuffer,
+        };
+
+        vk!.QueueSubmit(graphicsQueue, 1, in submitInfo, default);
+        vk!.QueueWaitIdle(graphicsQueue);
+
+        vk!.FreeCommandBuffers(device, commandPool, 1, in commandBuffer);
+    }
+
+    private void CreateImage(uint width, uint height, Format format, ImageTiling tiling, ImageUsageFlags usage, MemoryPropertyFlags properties, ref Image image, ref DeviceMemory imageMemory)
+    {
+        ImageCreateInfo imageInfo = new()
+        {
+            SType = StructureType.ImageCreateInfo,
+            ImageType = ImageType.Type2D,
+            Extent =
             {
-                throw new Exception("failed to create descriptor set layout!");
+                Width = width,
+                Height = height,
+                Depth = 1,
+            },
+            MipLevels = 1,
+            ArrayLayers = 1,
+            Format = format,
+            Tiling = tiling,
+            InitialLayout = ImageLayout.Undefined,
+            Usage = usage,
+            Samples = SampleCountFlags.Count1Bit,
+            SharingMode = SharingMode.Exclusive,
+        };
+
+        fixed (Image* imagePtr = &image)
+        {
+            if (vk!.CreateImage(device, in imageInfo, null, imagePtr) != Result.Success)
+            {
+                throw new Exception("failed to create image!");
             }
         }
+
+        vk!.GetImageMemoryRequirements(device, image, out MemoryRequirements memRequirements);
+
+        MemoryAllocateInfo allocInfo = new()
+        {
+            SType = StructureType.MemoryAllocateInfo,
+            AllocationSize = memRequirements.Size,
+            MemoryTypeIndex = FindMemoryType(memRequirements.MemoryTypeBits, properties),
+        };
+
+        fixed (DeviceMemory* imageMemoryPtr = &imageMemory)
+        {
+            if (vk!.AllocateMemory(device, in allocInfo, null, imageMemoryPtr) != Result.Success)
+            {
+                throw new Exception("failed to allocate image memory!");
+            }
+        }
+
+        vk!.BindImageMemory(device, image, imageMemory, 0);
     }
 
     private void MainLoop()
@@ -314,11 +445,22 @@ unsafe class HelloTriangleApplication
         }
 
         khrSwapChain!.DestroySwapchain(device, swapChain, null);
+
+        for (int i = 0; i < swapChainImages!.Length; i++)
+        {
+            vk!.DestroyBuffer(device, uniformBuffers![i], null);
+            vk!.FreeMemory(device, uniformBuffersMemory![i], null);
+        }
+
+        vk!.DestroyDescriptorPool(device, descriptorPool, null);
     }
 
     private void CleanUp()
     {
         CleanUpSwapChain();
+
+        vk!.DestroyImage(device, textureImage, null);
+        vk!.FreeMemory(device, textureImageMemory, null);
 
         vk!.DestroyDescriptorSetLayout(device, descriptorSetLayout, null);
 
@@ -377,58 +519,6 @@ unsafe class HelloTriangleApplication
         CreateCommandBuffers();
 
         imagesInFlight = new Fence[swapChainImages!.Length];
-    }
-
-    private void CreateDescriptorSets()
-    {
-        var layouts = new DescriptorSetLayout[swapChainImages!.Length];
-        Array.Fill(layouts, descriptorSetLayout);
-
-        fixed (DescriptorSetLayout* layoutsPtr = layouts)
-        {
-            DescriptorSetAllocateInfo allocateInfo = new()
-            {
-                SType = StructureType.DescriptorSetAllocateInfo,
-                DescriptorPool = descriptorPool,
-                DescriptorSetCount = (uint)swapChainImages!.Length,
-                PSetLayouts = layoutsPtr,
-            };
-
-            descriptorSets = new DescriptorSet[swapChainImages.Length];
-            fixed (DescriptorSet* descriptorSetsPtr = descriptorSets)
-            {
-                if (vk!.AllocateDescriptorSets(device, in allocateInfo, descriptorSetsPtr) != Result.Success)
-                {
-                    throw new Exception("failed to allocate descriptor sets!");
-                }
-            }
-        }
-
-
-        for (int i = 0; i < swapChainImages.Length; i++)
-        {
-            DescriptorBufferInfo bufferInfo = new()
-            {
-                Buffer = uniformBuffers![i],
-                Offset = 0,
-                Range = (ulong)Unsafe.SizeOf<UniformBufferObject>(),
-
-            };
-
-            WriteDescriptorSet descriptorWrite = new()
-            {
-                SType = StructureType.WriteDescriptorSet,
-                DstSet = descriptorSets[i],
-                DstBinding = 0,
-                DstArrayElement = 0,
-                DescriptorType = DescriptorType.UniformBuffer,
-                DescriptorCount = 1,
-                PBufferInfo = &bufferInfo,
-            };
-
-            vk!.UpdateDescriptorSets(device, 1, in descriptorWrite, 0, null);
-        }
-
     }
 
     private void CreateInstance()
@@ -776,6 +866,33 @@ unsafe class HelloTriangleApplication
         }
     }
 
+    private void CreateDescriptorSetLayout()
+    {
+        DescriptorSetLayoutBinding uboLayoutBinding = new()
+        {
+            Binding = 0,
+            DescriptorCount = 1,
+            DescriptorType = DescriptorType.UniformBuffer,
+            PImmutableSamplers = null,
+            StageFlags = ShaderStageFlags.VertexBit,
+        };
+
+        DescriptorSetLayoutCreateInfo layoutInfo = new()
+        {
+            SType = StructureType.DescriptorSetLayoutCreateInfo,
+            BindingCount = 1,
+            PBindings = &uboLayoutBinding,
+        };
+
+        fixed (DescriptorSetLayout* descriptorSetLayoutPtr = &descriptorSetLayout)
+        {
+            if (vk!.CreateDescriptorSetLayout(device, in layoutInfo, null, descriptorSetLayoutPtr) != Result.Success)
+            {
+                throw new Exception("failed to create descriptor set layout!");
+            }
+        }
+    }
+
     private void CreateGraphicsPipeline()
     {
         var vertShaderCode = File.ReadAllBytes("shaders/vert.spv");
@@ -862,7 +979,7 @@ unsafe class HelloTriangleApplication
                 PolygonMode = PolygonMode.Fill,
                 LineWidth = 1,
                 CullMode = CullModeFlags.BackBit,
-                FrontFace = FrontFace.Clockwise,
+                FrontFace = FrontFace.CounterClockwise,
                 DepthBiasEnable = false,
             };
 
@@ -1020,6 +1137,99 @@ unsafe class HelloTriangleApplication
         vk!.FreeMemory(device, stagingBufferMemory, null);
     }
 
+    private void CreateUniformBuffers()
+    {
+        ulong bufferSize = (ulong)Unsafe.SizeOf<UniformBufferObject>();
+
+        uniformBuffers = new Buffer[swapChainImages!.Length];
+        uniformBuffersMemory = new DeviceMemory[swapChainImages!.Length];
+
+        for (int i = 0; i < swapChainImages.Length; i++)
+        {
+            CreateBuffer(bufferSize, BufferUsageFlags.UniformBufferBit, MemoryPropertyFlags.HostVisibleBit | MemoryPropertyFlags.HostCoherentBit, ref uniformBuffers[i], ref uniformBuffersMemory[i]);
+        }
+
+    }
+
+    private void CreateDescriptorPool()
+    {
+        DescriptorPoolSize poolSize = new()
+        {
+            Type = DescriptorType.UniformBuffer,
+            DescriptorCount = (uint)swapChainImages!.Length,
+        };
+
+
+        DescriptorPoolCreateInfo poolInfo = new()
+        {
+            SType = StructureType.DescriptorPoolCreateInfo,
+            PoolSizeCount = 1,
+            PPoolSizes = &poolSize,
+            MaxSets = (uint)swapChainImages!.Length,
+        };
+
+        fixed (DescriptorPool* descriptorPoolPtr = &descriptorPool)
+        {
+            if (vk!.CreateDescriptorPool(device, in poolInfo, null, descriptorPoolPtr) != Result.Success)
+            {
+                throw new Exception("failed to create descriptor pool!");
+            }
+
+        }
+    }
+
+    private void CreateDescriptorSets()
+    {
+        var layouts = new DescriptorSetLayout[swapChainImages!.Length];
+        Array.Fill(layouts, descriptorSetLayout);
+
+        fixed (DescriptorSetLayout* layoutsPtr = layouts)
+        {
+            DescriptorSetAllocateInfo allocateInfo = new()
+            {
+                SType = StructureType.DescriptorSetAllocateInfo,
+                DescriptorPool = descriptorPool,
+                DescriptorSetCount = (uint)swapChainImages!.Length,
+                PSetLayouts = layoutsPtr,
+            };
+
+            descriptorSets = new DescriptorSet[swapChainImages.Length];
+            fixed (DescriptorSet* descriptorSetsPtr = descriptorSets)
+            {
+                if (vk!.AllocateDescriptorSets(device, in allocateInfo, descriptorSetsPtr) != Result.Success)
+                {
+                    throw new Exception("failed to allocate descriptor sets!");
+                }
+            }
+        }
+
+
+        for (int i = 0; i < swapChainImages.Length; i++)
+        {
+            DescriptorBufferInfo bufferInfo = new()
+            {
+                Buffer = uniformBuffers![i],
+                Offset = 0,
+                Range = (ulong)Unsafe.SizeOf<UniformBufferObject>(),
+
+            };
+
+            WriteDescriptorSet descriptorWrite = new()
+            {
+                SType = StructureType.WriteDescriptorSet,
+                DstSet = descriptorSets[i],
+                DstBinding = 0,
+                DstArrayElement = 0,
+                DescriptorType = DescriptorType.UniformBuffer,
+                DescriptorCount = 1,
+                PBufferInfo = &bufferInfo,
+            };
+
+            vk!.UpdateDescriptorSets(device, 1, in descriptorWrite, 0, null);
+        }
+
+    }
+
     private void CreateBuffer(ulong size, BufferUsageFlags usage, MemoryPropertyFlags properties, ref Buffer buffer, ref DeviceMemory bufferMemory)
     {
         BufferCreateInfo bufferInfo = new()
@@ -1061,23 +1271,7 @@ unsafe class HelloTriangleApplication
 
     private void CopyBuffer(Buffer srcBuffer, Buffer dstBuffer, ulong size)
     {
-        CommandBufferAllocateInfo allocateInfo = new()
-        {
-            SType = StructureType.CommandBufferAllocateInfo,
-            Level = CommandBufferLevel.Primary,
-            CommandPool = commandPool,
-            CommandBufferCount = 1,
-        };
-
-        vk!.AllocateCommandBuffers(device, in allocateInfo, out CommandBuffer commandBuffer);
-
-        CommandBufferBeginInfo beginInfo = new()
-        {
-            SType = StructureType.CommandBufferBeginInfo,
-            Flags = CommandBufferUsageFlags.OneTimeSubmitBit,
-        };
-
-        vk!.BeginCommandBuffer(commandBuffer, in beginInfo);
+        CommandBuffer commandBuffer = BeginSingleTimeCommands();
 
         BufferCopy copyRegion = new()
         {
@@ -1086,20 +1280,9 @@ unsafe class HelloTriangleApplication
 
         vk!.CmdCopyBuffer(commandBuffer, srcBuffer, dstBuffer, 1, in copyRegion);
 
-        vk!.EndCommandBuffer(commandBuffer);
-
-        SubmitInfo submitInfo = new()
-        {
-            SType = StructureType.SubmitInfo,
-            CommandBufferCount = 1,
-            PCommandBuffers = &commandBuffer,
-        };
-
-        vk!.QueueSubmit(graphicsQueue, 1, in submitInfo, default);
-        vk!.QueueWaitIdle(graphicsQueue);
-
-        vk!.FreeCommandBuffers(device, commandPool, 1, in commandBuffer);
+        EndSingleTimeCommands(commandBuffer);
     }
+
 
     private uint FindMemoryType(uint typeFilter, MemoryPropertyFlags properties)
     {
@@ -1227,6 +1410,27 @@ unsafe class HelloTriangleApplication
         }
     }
 
+    private void UpdateUniformBuffer(uint currentImage)
+    {
+        //Silk Window has timing information so we are skipping the time code.
+        var time = (float)window!.Time;
+
+        UniformBufferObject ubo = new()
+        {
+            model = Matrix4X4<float>.Identity * Matrix4X4.CreateFromAxisAngle<float>(new Vector3D<float>(0, 0, 1), time * Scalar.DegreesToRadians(90.0f)),
+            view = Matrix4X4.CreateLookAt(new Vector3D<float>(2, 2, 2), new Vector3D<float>(0, 0, 0), new Vector3D<float>(0, 0, 1)),
+            proj = Matrix4X4.CreatePerspectiveFieldOfView(Scalar.DegreesToRadians(45.0f), (float)swapChainExtent.Width / swapChainExtent.Height, 0.1f, 10.0f),
+        };
+        ubo.proj.M22 *= -1;
+
+
+        void* data;
+        vk!.MapMemory(device, uniformBuffersMemory![currentImage], 0, (ulong)Unsafe.SizeOf<UniformBufferObject>(), 0, &data);
+        new Span<UniformBufferObject>(data, 1)[0] = ubo;
+        vk!.UnmapMemory(device, uniformBuffersMemory![currentImage]);
+
+    }
+
     private void DrawFrame(double delta)
     {
         vk!.WaitForFences(device, 1, in inFlightFences![currentFrame], true, ulong.MaxValue);
@@ -1314,29 +1518,6 @@ unsafe class HelloTriangleApplication
 
         currentFrame = (currentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
 
-    }
-
-    private void UpdateUniformBuffer(uint currentImage)
-    {
-        //Silk Window has timing information so we are skipping the time code.
-        var time = (float)window!.Time;
-
-        UniformBufferObject ubo = new()
-        {
-            model = Matrix4X4<float>.Identity * Matrix4X4.CreateFromAxisAngle<float>(new Vector3D<float>(0, 0, 1), time * Radians(90.0f)),
-            view = Matrix4X4.CreateLookAt(new Vector3D<float>(2, 2, 2), new Vector3D<float>(0, 0, 0), new Vector3D<float>(0, 0, 1)),
-            proj = Matrix4X4.CreatePerspectiveFieldOfView(Radians(45.0f), (float)swapChainExtent.Width / swapChainExtent.Height, 0.1f, 10.0f),
-        };
-        ubo.proj.M22 *= -1;
-
-
-        void* data;
-        vk!.MapMemory(device, uniformBuffersMemory![currentImage], 0, (ulong)Unsafe.SizeOf<UniformBufferObject>(), 0, &data);
-        new Span<UniformBufferObject>(data, 1)[0] = ubo;
-        vk!.UnmapMemory(device, uniformBuffersMemory![currentImage]);
-
-
-        static float Radians(float angle) => angle * MathF.PI / 180f;
     }
 
     private ShaderModule CreateShaderModule(byte[] code)
