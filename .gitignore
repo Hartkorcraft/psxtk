@@ -150,3 +150,5 @@ obj/Debug/net9.0/psxtk.AssemblyInfo.cs
 obj/Debug/net9.0/psxtk.AssemblyInfoInputs.cache
 obj/Debug/net9.0/psxtk.assets.cache
 obj/Debug/net9.0/psxtk.GeneratedMSBuildEditorConfig.editorconfig
+obj
+bin
