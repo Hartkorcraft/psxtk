@@ -12,6 +12,7 @@ using Buffer = Silk.NET.Vulkan.Buffer;
 using Image = Silk.NET.Vulkan.Image;
 using Semaphore = Silk.NET.Vulkan.Semaphore;
 
+
 public unsafe class GraphicsPipeline
 {
     public Pipeline graphicsPipeline;
@@ -212,7 +213,7 @@ public unsafe class GraphicsPipeline
 
         AttachmentDescription depthAttachment = new()
         {
-            Format = game.FindDepthFormat(),
+            Format = FindDepthFormat(game),
             Samples = SampleCountFlags.Count1Bit,
             LoadOp = AttachmentLoadOp.Clear,
             StoreOp = AttachmentStoreOp.DontCare,
@@ -422,4 +423,38 @@ public unsafe class GraphicsPipeline
         }
         return shaderModule;
     }
+
+    public void CreateDepthResources(Game game)
+    {
+        Format depthFormat = FindDepthFormat(game);
+
+        game.CreateImage(game.renderSwapChain.swapChainExtent.Width, game.renderSwapChain.swapChainExtent.Height, 1, depthFormat, ImageTiling.Optimal, ImageUsageFlags.DepthStencilAttachmentBit, MemoryPropertyFlags.DeviceLocalBit, ref game.depthImage, ref game.depthImageMemory);
+        game.depthImageView = game.CreateImageView(game.depthImage, depthFormat, ImageAspectFlags.DepthBit, 1);
+    }
+
+    public Format FindSupportedFormat(Game game, IEnumerable<Format> candidates, ImageTiling tiling, FormatFeatureFlags features)
+    {
+        foreach (var format in candidates)
+        {
+            game.vk!.GetPhysicalDeviceFormatProperties(game.renderDevice.physicalDevice, format, out var props);
+
+            if (tiling == ImageTiling.Linear && (props.LinearTilingFeatures & features) == features)
+            {
+                return format;
+            }
+            else if (tiling == ImageTiling.Optimal && (props.OptimalTilingFeatures & features) == features)
+            {
+                return format;
+            }
+        }
+
+        throw new Exception("failed to find supported format!");
+    }
+
+    public Format FindDepthFormat(Game game) => FindSupportedFormat(
+        game,
+        [Format.D32Sfloat, Format.D32SfloatS8Uint, Format.D24UnormS8Uint],
+        ImageTiling.Optimal,
+        FormatFeatureFlags.DepthStencilAttachmentBit);
+
 }

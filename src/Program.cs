@@ -148,13 +148,13 @@ public unsafe class Game
         renderDevice.PickPhysicalDevice(this);
         renderDevice.CreateLogicalDevice(this);
         renderSwapChain.CreateSwapChain(this);
-        CreateImageViews();
+        renderSwapChain.CreateImageViews(this);
         graphicsPipeline.CreateRenderPass(this);
         graphicsPipeline.CreateDescriptorSetLayout(this);
         graphicsPipeline.CreateGraphicsPipeline(this);
         renderDevice.CreateCommandPool(this);
-        CreateDepthResources();
-        CreateFramebuffers();
+        graphicsPipeline.CreateDepthResources(this);
+        renderSwapChain.CreateFramebuffers(this);
         CreateTextureImage();
         CreateTextureImageView();
         CreateTextureSampler();
@@ -215,80 +215,6 @@ public unsafe class Game
         vk!.Dispose();
 
         window?.Dispose();
-    }
-
-    public void CreateImageViews()
-    {
-        renderSwapChain.swapChainImageViews = new ImageView[renderSwapChain.swapChainImages!.Length];
-
-        for (int i = 0; i < renderSwapChain.swapChainImages.Length; i++)
-        {
-
-            renderSwapChain.swapChainImageViews[i] = CreateImageView(renderSwapChain.swapChainImages[i], renderSwapChain.swapChainImageFormat, ImageAspectFlags.ColorBit, 1);
-        }
-    }
-
-    public void CreateFramebuffers()
-    {
-        renderSwapChain.swapChainFramebuffers = new Framebuffer[renderSwapChain.swapChainImageViews!.Length];
-
-        for (int i = 0; i < renderSwapChain.swapChainImageViews.Length; i++)
-        {
-            var attachments = new[] { renderSwapChain.swapChainImageViews[i], depthImageView };
-
-            fixed (ImageView* attachmentsPtr = attachments)
-            {
-                FramebufferCreateInfo framebufferInfo = new()
-                {
-                    SType = StructureType.FramebufferCreateInfo,
-                    RenderPass = graphicsPipeline.renderPass,
-                    AttachmentCount = (uint)attachments.Length,
-                    PAttachments = attachmentsPtr,
-                    Width = renderSwapChain.swapChainExtent.Width,
-                    Height = renderSwapChain.swapChainExtent.Height,
-                    Layers = 1,
-                };
-
-                if (vk!.CreateFramebuffer(renderDevice.device, in framebufferInfo, null, out renderSwapChain.swapChainFramebuffers[i]) != Result.Success)
-                {
-                    throw new Exception("failed to create framebuffer!");
-                }
-            }
-        }
-    }
-
-
-
-    public void CreateDepthResources()
-    {
-        Format depthFormat = FindDepthFormat();
-
-        CreateImage(renderSwapChain.swapChainExtent.Width, renderSwapChain.swapChainExtent.Height, 1, depthFormat, ImageTiling.Optimal, ImageUsageFlags.DepthStencilAttachmentBit, MemoryPropertyFlags.DeviceLocalBit, ref depthImage, ref depthImageMemory);
-        depthImageView = CreateImageView(depthImage, depthFormat, ImageAspectFlags.DepthBit, 1);
-    }
-
-    public Format FindSupportedFormat(IEnumerable<Format> candidates, ImageTiling tiling, FormatFeatureFlags features)
-    {
-        foreach (var format in candidates)
-        {
-            vk!.GetPhysicalDeviceFormatProperties(renderDevice.physicalDevice, format, out var props);
-
-            if (tiling == ImageTiling.Linear && (props.LinearTilingFeatures & features) == features)
-            {
-                return format;
-            }
-            else if (tiling == ImageTiling.Optimal && (props.OptimalTilingFeatures & features) == features)
-            {
-                return format;
-            }
-        }
-
-        throw new Exception("failed to find supported format!");
-    }
-
-    public Format FindDepthFormat()
-    {
-        return FindSupportedFormat(new[] { Format.D32Sfloat, Format.D32SfloatS8Uint, Format.D24UnormS8Uint }, ImageTiling.Optimal, FormatFeatureFlags.DepthStencilAttachmentBit);
     }
 
     public void CreateTextureImage()

@@ -148,11 +148,11 @@ public unsafe class RenderSwapChain
         game.renderSwapChain.CleanUpSwapChain(game);
 
         CreateSwapChain(game);
-        game.CreateImageViews();
+        CreateImageViews(game);
         game.graphicsPipeline.CreateRenderPass(game);
         game.graphicsPipeline.CreateGraphicsPipeline(game);
-        game.CreateDepthResources();
-        game.CreateFramebuffers();
+        game.graphicsPipeline.CreateDepthResources(game);
+        CreateFramebuffers(game);
         game.renderBuffer.CreateUniformBuffers(game);
         game.CreateDescriptorPool();
         game.CreateDescriptorSets();
@@ -250,5 +250,45 @@ public unsafe class RenderSwapChain
         }
 
         return PresentModeKHR.FifoKhr;
+    }
+
+    public void CreateImageViews(Game game)
+    {
+        game.renderSwapChain.swapChainImageViews = new ImageView[game.renderSwapChain.swapChainImages!.Length];
+
+        for (int i = 0; i < game.renderSwapChain.swapChainImages.Length; i++)
+        {
+
+            game.renderSwapChain.swapChainImageViews[i] = game.CreateImageView(game.renderSwapChain.swapChainImages[i], game.renderSwapChain.swapChainImageFormat, ImageAspectFlags.ColorBit, 1);
+        }
+    }
+
+    public void CreateFramebuffers(Game game)
+    {
+        game.renderSwapChain.swapChainFramebuffers = new Framebuffer[game.renderSwapChain.swapChainImageViews!.Length];
+
+        for (int i = 0; i < game.renderSwapChain.swapChainImageViews.Length; i++)
+        {
+            var attachments = new[] { game.renderSwapChain.swapChainImageViews[i], game.depthImageView };
+
+            fixed (ImageView* attachmentsPtr = attachments)
+            {
+                FramebufferCreateInfo framebufferInfo = new()
+                {
+                    SType = StructureType.FramebufferCreateInfo,
+                    RenderPass = game.graphicsPipeline.renderPass,
+                    AttachmentCount = (uint)attachments.Length,
+                    PAttachments = attachmentsPtr,
+                    Width = game.renderSwapChain.swapChainExtent.Width,
+                    Height = game.renderSwapChain.swapChainExtent.Height,
+                    Layers = 1,
+                };
+
+                if (game.vk!.CreateFramebuffer(game.renderDevice.device, in framebufferInfo, null, out game.renderSwapChain.swapChainFramebuffers[i]) != Result.Success)
+                {
+                    throw new Exception("failed to create framebuffer!");
+                }
+            }
+        }
     }
 }
