@@ -1,7 +1,12 @@
 
 using Silk.NET.Maths;
 
-public class Camera(Vector3D<float> eye, Vector3D<float> target, Vector3D<float> up, float aspect, float fovy, float znear, float zfar)
+using System.Runtime.CompilerServices;
+using Silk.NET.Maths;
+using Silk.NET.Vulkan;
+using Buffer = Silk.NET.Vulkan.Buffer;
+
+public unsafe class Camera(Vector3D<float> eye, Vector3D<float> target, Vector3D<float> up, float aspect, float fovy, float znear, float zfar)
 {
     public Vector3D<float> eye = eye;
     public Vector3D<float> target = target;
@@ -18,9 +23,30 @@ public class Camera(Vector3D<float> eye, Vector3D<float> target, Vector3D<float>
 
         return proj;
     }
-}
 
-public class CameraUniform
-{
+    public static DescriptorBufferInfo GetDescriptorBufferInfo(Buffer buffer)
+    {
+        DescriptorBufferInfo bufferInfo = new()
+        {
+            Buffer = buffer,
+            Offset = 0,
+            Range = (ulong)Unsafe.SizeOf<CameraUniform>(),
 
+        };
+        return bufferInfo;
+    }
+
+    public static WriteDescriptorSet GetWriteDescriptorSet(DescriptorBufferInfo bufferInfo, DescriptorSet descriptorSet)
+    {
+        return new WriteDescriptorSet()
+        {
+            SType = StructureType.WriteDescriptorSet,
+            DstSet = descriptorSet,
+            DstBinding = 0,
+            DstArrayElement = 0,
+            DescriptorType = DescriptorType.UniformBuffer,
+            DescriptorCount = 1,
+            PBufferInfo = &bufferInfo,
+        };
+    }
 }

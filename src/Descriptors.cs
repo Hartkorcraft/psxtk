@@ -1,5 +1,6 @@
 using System.Runtime.CompilerServices;
 using Silk.NET.Vulkan;
+using Buffer = Silk.NET.Vulkan.Buffer;
 
 public unsafe class Descriptors
 {
@@ -80,13 +81,8 @@ public unsafe class Descriptors
 
         for (int i = 0; i < game.renderer.renderSwapChain.swapChainImages.Length; i++)
         {
-            DescriptorBufferInfo bufferInfo = new()
-            {
-                Buffer = game.graphicsPipeline. uniformBuffers![i],
-                Offset = 0,
-                Range = (ulong)Unsafe.SizeOf<UniformBufferObject>(),
 
-            };
+            var cameraBufferInfo = Camera.GetDescriptorBufferInfo(game.graphicsPipeline.uniformBuffers![i]);
 
             DescriptorImageInfo imageInfo = new()
             {
@@ -97,16 +93,7 @@ public unsafe class Descriptors
 
             var descriptorWrites = new WriteDescriptorSet[]
             {
-                new()
-                {
-                    SType = StructureType.WriteDescriptorSet,
-                    DstSet = descriptorSets[i],
-                    DstBinding = 0,
-                    DstArrayElement = 0,
-                    DescriptorType = DescriptorType.UniformBuffer,
-                    DescriptorCount = 1,
-                    PBufferInfo = &bufferInfo,
-                },
+                Camera.GetWriteDescriptorSet(cameraBufferInfo,descriptorSets[i]),
                 new()
                 {
                     SType = StructureType.WriteDescriptorSet,
@@ -125,4 +112,5 @@ public unsafe class Descriptors
             }
         }
     }
+
 }

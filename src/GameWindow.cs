@@ -1,3 +1,4 @@
+using Silk.NET.Input;
 using Silk.NET.Maths;
 using Silk.NET.Windowing;
 
@@ -8,6 +9,7 @@ public unsafe class GameWindow
 
     public IWindow? window;
     public bool frameBufferResized = false;
+    IInputContext? inputContext;
 
     public void InitWindow()
     {
@@ -27,6 +29,10 @@ public unsafe class GameWindow
         }
 
         window.Resize += FramebufferResizeCallback;
+        inputContext = window.CreateInput();
+        inputContext.Keyboards[0].KeyDown += OnKeyDown;
+        inputContext.Keyboards[0].KeyUp += OnKeyUp;
+        inputContext.Keyboards[0].KeyChar += OnKeyChar;
     }
 
     public void Run() => window!.Run();
@@ -36,4 +42,16 @@ public unsafe class GameWindow
         frameBufferResized = true;
     }
 
+
+    void OnKeyChar(IKeyboard keyboard, char c)
+    {
+    }
+
+    void OnKeyUp(IKeyboard keyboard, Key key, int i)// chuj wie czym jest i
+    {
+    }
+
+    void OnKeyDown(IKeyboard keyboard, Key key, int i)// chuj wie czym jest i
+    {
+    }
 }

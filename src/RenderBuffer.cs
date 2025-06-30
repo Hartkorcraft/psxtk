@@ -92,7 +92,7 @@ public unsafe class RenderBuffer
 
     public void CreateUniformBuffers(Game game)
     {
-        ulong bufferSize = (ulong)Unsafe.SizeOf<UniformBufferObject>();
+        ulong bufferSize = (ulong)Unsafe.SizeOf<CameraUniform>();
 
         game.graphicsPipeline.uniformBuffers = new Buffer[game.renderer.renderSwapChain.swapChainImages!.Length];
         game.graphicsPipeline.uniformBuffersMemory = new DeviceMemory[game.renderer.renderSwapChain.swapChainImages!.Length];
@@ -123,17 +123,17 @@ public unsafe class RenderBuffer
         //Silk Window has timing information so we are skipping the time code.
         var time = (float)game.gameWindow.window!.Time;
 
-        UniformBufferObject ubo = new()
+        CameraUniform cameraUniform = new()
         {
             model = Matrix4X4<float>.Identity * Matrix4X4.CreateFromAxisAngle<float>(new Vector3D<float>(0, 0, 1), time * Scalar.DegreesToRadians(90.0f)),
             view = Matrix4X4.CreateLookAt(new Vector3D<float>(2, 2, 2), new Vector3D<float>(0, 0, 0), new Vector3D<float>(0, 0, 1)),
             proj = Matrix4X4.CreatePerspectiveFieldOfView(Scalar.DegreesToRadians(45.0f), (float)game.renderer.renderSwapChain.swapChainExtent.Width / game.renderer.renderSwapChain.swapChainExtent.Height, 0.1f, 10.0f),
         };
-        ubo.proj.M22 *= -1;
+        cameraUniform.proj.M22 *= -1;
 
         void* data;
-        game.vk!.MapMemory(game.renderDevice.device, game.graphicsPipeline.uniformBuffersMemory![currentImage], 0, (ulong)Unsafe.SizeOf<UniformBufferObject>(), 0, &data);
-        new Span<UniformBufferObject>(data, 1)[0] = ubo;
+        game.vk!.MapMemory(game.renderDevice.device, game.graphicsPipeline.uniformBuffersMemory![currentImage], 0, (ulong)Unsafe.SizeOf<CameraUniform>(), 0, &data);
+        new Span<CameraUniform>(data, 1)[0] = cameraUniform;
         game.vk!.UnmapMemory(game.renderDevice.device, game.graphicsPipeline.uniformBuffersMemory![currentImage]);
     }
 
