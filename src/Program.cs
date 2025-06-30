@@ -62,10 +62,12 @@ public unsafe class Game
     public Framebuffer[]? swapChainFramebuffers;
 
 
-    GraphicsPipeline graphicsPipeline = new();
-    public RenderPass renderPass;
-    public DescriptorSetLayout descriptorSetLayout;
-    public PipelineLayout pipelineLayout;
+    public GraphicsPipeline graphicsPipeline = new();
+    public RenderSwapChain renderSwapChain = new();
+
+    // public RenderPass renderPass;
+    // public DescriptorSetLayout descriptorSetLayout;
+    // public PipelineLayout pipelineLayout;
 
     public CommandPool commandPool;
 
@@ -146,8 +148,8 @@ public unsafe class Game
         CreateLogicalDevice();
         CreateSwapChain();
         CreateImageViews();
-        CreateRenderPass();
-        CreateDescriptorSetLayout();
+        graphicsPipeline.CreateRenderPass(this);
+        graphicsPipeline.CreateDescriptorSetLayout(this);
         graphicsPipeline.CreateGraphicsPipeline(this);
         CreateCommandPool();
         CreateDepthResources();
@@ -172,45 +174,9 @@ public unsafe class Game
         vk!.DeviceWaitIdle(device);
     }
 
-    public void CleanUpSwapChain()
-    {
-        vk!.DestroyImageView(device, depthImageView, null);
-        vk!.DestroyImage(device, depthImage, null);
-        vk!.FreeMemory(device, depthImageMemory, null);
-
-        foreach (var framebuffer in swapChainFramebuffers!)
-        {
-            vk!.DestroyFramebuffer(device, framebuffer, null);
-        }
-
-        fixed (CommandBuffer* commandBuffersPtr = commandBuffers)
-        {
-            vk!.FreeCommandBuffers(device, commandPool, (uint)commandBuffers!.Length, commandBuffersPtr);
-        }
-
-        vk!.DestroyPipeline(device, graphicsPipeline.graphicsPipeline, null);
-        vk!.DestroyPipelineLayout(device, pipelineLayout, null);
-        vk!.DestroyRenderPass(device, renderPass, null);
-
-        foreach (var imageView in swapChainImageViews!)
-        {
-            vk!.DestroyImageView(device, imageView, null);
-        }
-
-        khrSwapChain!.DestroySwapchain(device, swapChain, null);
-
-        for (int i = 0; i < swapChainImages!.Length; i++)
-        {
-            vk!.DestroyBuffer(device, uniformBuffers![i], null);
-            vk!.FreeMemory(device, uniformBuffersMemory![i], null);
-        }
-
-        vk!.DestroyDescriptorPool(device, descriptorPool, null);
-    }
-
     public void CleanUp()
     {
-        CleanUpSwapChain();
+        renderSwapChain.CleanUpSwapChain(this);
 
         vk!.DestroySampler(device, textureSampler, null);
         vk!.DestroyImageView(device, textureImageView, null);
@@ -218,7 +184,7 @@ public unsafe class Game
         vk!.DestroyImage(device, textureImage, null);
         vk!.FreeMemory(device, textureImageMemory, null);
 
-        vk!.DestroyDescriptorSetLayout(device, descriptorSetLayout, null);
+        vk!.DestroyDescriptorSetLayout(device, graphicsPipeline.descriptorSetLayout, null);
 
         vk!.DestroyBuffer(device, indexBuffer, null);
         vk!.FreeMemory(device, indexBufferMemory, null);
@@ -248,34 +214,6 @@ public unsafe class Game
         vk!.Dispose();
 
         window?.Dispose();
-    }
-
-    public void RecreateSwapChain()
-    {
-        Vector2D<int> framebufferSize = window!.FramebufferSize;
-
-        while (framebufferSize.X == 0 || framebufferSize.Y == 0)
-        {
-            framebufferSize = window.FramebufferSize;
-            window.DoEvents();
-        }
-
-        vk!.DeviceWaitIdle(device);
-
-        CleanUpSwapChain();
-
-        CreateSwapChain();
-        CreateImageViews();
-        CreateRenderPass();
-        graphicsPipeline.CreateGraphicsPipeline(this);
-        CreateDepthResources();
-        CreateFramebuffers();
-        CreateUniformBuffers();
-        CreateDescriptorPool();
-        CreateDescriptorSets();
-        CreateCommandBuffers();
-
-        imagesInFlight = new Fence[swapChainImages!.Length];
     }
 
     public void CreateInstance()
@@ -548,124 +486,6 @@ public unsafe class Game
         }
     }
 
-    public void CreateRenderPass()
-    {
-        AttachmentDescription colorAttachment = new()
-        {
-            Format = swapChainImageFormat,
-            Samples = SampleCountFlags.Count1Bit,
-            LoadOp = AttachmentLoadOp.Clear,
-            StoreOp = AttachmentStoreOp.Store,
-            StencilLoadOp = AttachmentLoadOp.DontCare,
-            InitialLayout = ImageLayout.Undefined,
-            FinalLayout = ImageLayout.PresentSrcKhr,
-        };
-
-        AttachmentDescription depthAttachment = new()
-        {
-            Format = FindDepthFormat(),
-            Samples = SampleCountFlags.Count1Bit,
-            LoadOp = AttachmentLoadOp.Clear,
-            StoreOp = AttachmentStoreOp.DontCare,
-            StencilLoadOp = AttachmentLoadOp.DontCare,
-            StencilStoreOp = AttachmentStoreOp.DontCare,
-            InitialLayout = ImageLayout.Undefined,
-            FinalLayout = ImageLayout.DepthStencilAttachmentOptimal,
-        };
-
-        AttachmentReference colorAttachmentRef = new()
-        {
-            Attachment = 0,
-            Layout = ImageLayout.ColorAttachmentOptimal,
-        };
-
-        AttachmentReference depthAttachmentRef = new()
-        {
-            Attachment = 1,
-            Layout = ImageLayout.DepthStencilAttachmentOptimal,
-        };
-
-        SubpassDescription subpass = new()
-        {
-            PipelineBindPoint = PipelineBindPoint.Graphics,
-            ColorAttachmentCount = 1,
-            PColorAttachments = &colorAttachmentRef,
-            PDepthStencilAttachment = &depthAttachmentRef,
-        };
-
-        SubpassDependency dependency = new()
-        {
-            SrcSubpass = Vk.SubpassExternal,
-            DstSubpass = 0,
-            SrcStageMask = PipelineStageFlags.ColorAttachmentOutputBit | PipelineStageFlags.EarlyFragmentTestsBit,
-            SrcAccessMask = 0,
-            DstStageMask = PipelineStageFlags.ColorAttachmentOutputBit | PipelineStageFlags.EarlyFragmentTestsBit,
-            DstAccessMask = AccessFlags.ColorAttachmentWriteBit | AccessFlags.DepthStencilAttachmentWriteBit
-        };
-
-        var attachments = new[] { colorAttachment, depthAttachment };
-
-        fixed (AttachmentDescription* attachmentsPtr = attachments)
-        {
-            RenderPassCreateInfo renderPassInfo = new()
-            {
-                SType = StructureType.RenderPassCreateInfo,
-                AttachmentCount = (uint)attachments.Length,
-                PAttachments = attachmentsPtr,
-                SubpassCount = 1,
-                PSubpasses = &subpass,
-                DependencyCount = 1,
-                PDependencies = &dependency,
-            };
-
-            if (vk!.CreateRenderPass(device, in renderPassInfo, null, out renderPass) != Result.Success)
-            {
-                throw new Exception("failed to create render pass!");
-            }
-        }
-    }
-
-    public void CreateDescriptorSetLayout()
-    {
-        DescriptorSetLayoutBinding uboLayoutBinding = new()
-        {
-            Binding = 0,
-            DescriptorCount = 1,
-            DescriptorType = DescriptorType.UniformBuffer,
-            PImmutableSamplers = null,
-            StageFlags = ShaderStageFlags.VertexBit,
-        };
-
-        DescriptorSetLayoutBinding samplerLayoutBinding = new()
-        {
-            Binding = 1,
-            DescriptorCount = 1,
-            DescriptorType = DescriptorType.CombinedImageSampler,
-            PImmutableSamplers = null,
-            StageFlags = ShaderStageFlags.FragmentBit,
-        };
-
-        var bindings = new DescriptorSetLayoutBinding[] { uboLayoutBinding, samplerLayoutBinding };
-
-        fixed (DescriptorSetLayoutBinding* bindingsPtr = bindings)
-        fixed (DescriptorSetLayout* descriptorSetLayoutPtr = &descriptorSetLayout)
-        {
-            DescriptorSetLayoutCreateInfo layoutInfo = new()
-            {
-                SType = StructureType.DescriptorSetLayoutCreateInfo,
-                BindingCount = (uint)bindings.Length,
-                PBindings = bindingsPtr,
-            };
-
-            if (vk!.CreateDescriptorSetLayout(device, in layoutInfo, null, descriptorSetLayoutPtr) != Result.Success)
-            {
-                throw new Exception("failed to create descriptor set layout!");
-            }
-        }
-    }
-
-
-
     public void CreateFramebuffers()
     {
         swapChainFramebuffers = new Framebuffer[swapChainImageViews!.Length];
@@ -679,7 +499,7 @@ public unsafe class Game
                 FramebufferCreateInfo framebufferInfo = new()
                 {
                     SType = StructureType.FramebufferCreateInfo,
-                    RenderPass = renderPass,
+                    RenderPass = graphicsPipeline.renderPass,
                     AttachmentCount = (uint)attachments.Length,
                     PAttachments = attachmentsPtr,
                     Width = swapChainExtent.Width,
@@ -1235,7 +1055,7 @@ public unsafe class Game
     public void CreateDescriptorSets()
     {
         var layouts = new DescriptorSetLayout[swapChainImages!.Length];
-        Array.Fill(layouts, descriptorSetLayout);
+        Array.Fill(layouts, graphicsPipeline.descriptorSetLayout);
 
         fixed (DescriptorSetLayout* layoutsPtr = layouts)
         {
@@ -1451,7 +1271,7 @@ public unsafe class Game
             RenderPassBeginInfo renderPassInfo = new()
             {
                 SType = StructureType.RenderPassBeginInfo,
-                RenderPass = renderPass,
+                RenderPass = graphicsPipeline.renderPass,
                 Framebuffer = swapChainFramebuffers[i],
                 RenderArea =
                 {
@@ -1494,7 +1314,7 @@ public unsafe class Game
 
             vk!.CmdBindIndexBuffer(commandBuffers[i], indexBuffer, 0, IndexType.Uint32);
 
-            vk!.CmdBindDescriptorSets(commandBuffers[i], PipelineBindPoint.Graphics, pipelineLayout, 0, 1, in descriptorSets![i], 0, null);
+            vk!.CmdBindDescriptorSets(commandBuffers[i], PipelineBindPoint.Graphics, graphicsPipeline.pipelineLayout, 0, 1, in descriptorSets![i], 0, null);
 
             vk!.CmdDrawIndexed(commandBuffers[i], (uint)indices!.Length, 1, 0, 0, 0);
 
@@ -1567,7 +1387,7 @@ public unsafe class Game
 
         if (result == Result.ErrorOutOfDateKhr)
         {
-            RecreateSwapChain();
+            renderSwapChain.RecreateSwapChain(this);
             return;
         }
         else if (result != Result.Success && result != Result.SuboptimalKhr)
@@ -1636,7 +1456,7 @@ public unsafe class Game
         if (result == Result.ErrorOutOfDateKhr || result == Result.SuboptimalKhr || frameBufferResized)
         {
             frameBufferResized = false;
-            RecreateSwapChain();
+            renderSwapChain.RecreateSwapChain(this);
         }
         else if (result != Result.Success)
         {

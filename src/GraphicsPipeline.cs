@@ -15,6 +15,16 @@ using Semaphore = Silk.NET.Vulkan.Semaphore;
 public unsafe class GraphicsPipeline
 {
     public Pipeline graphicsPipeline;
+    public RenderPass renderPass;
+    public DescriptorSetLayout descriptorSetLayout;
+    public PipelineLayout pipelineLayout;
+
+    public void CleanUp(Game game)
+    {
+        game.vk!.DestroyPipeline(game.device, graphicsPipeline, null);
+        game.vk!.DestroyPipelineLayout(game.device, pipelineLayout, null);
+        game.vk!.DestroyRenderPass(game.device, renderPass, null);
+    }
 
     public void CreateGraphicsPipeline(Game game)
     {
@@ -50,7 +60,7 @@ public unsafe class GraphicsPipeline
         var attributeDescriptions = Vertex.GetAttributeDescriptions();
 
         fixed (VertexInputAttributeDescription* attributeDescriptionsPtr = attributeDescriptions)
-        fixed (DescriptorSetLayout* descriptorSetLayoutPtr = &game.descriptorSetLayout)
+        fixed (DescriptorSetLayout* descriptorSetLayoutPtr = &descriptorSetLayout)
         {
 
             PipelineVertexInputStateCreateInfo vertexInputInfo = new()
@@ -151,7 +161,7 @@ public unsafe class GraphicsPipeline
                 PSetLayouts = descriptorSetLayoutPtr
             };
 
-            if (game.vk!.CreatePipelineLayout(game.device, in pipelineLayoutInfo, null, out game.pipelineLayout) != Result.Success)
+            if (game.vk!.CreatePipelineLayout(game.device, in pipelineLayoutInfo, null, out pipelineLayout) != Result.Success)
             {
                 throw new Exception("failed to create pipeline layout!");
             }
@@ -168,8 +178,8 @@ public unsafe class GraphicsPipeline
                 PMultisampleState = &multisampling,
                 PDepthStencilState = &depthStencil,
                 PColorBlendState = &colorBlending,
-                Layout = game.pipelineLayout,
-                RenderPass = game.renderPass,
+                Layout = pipelineLayout,
+                RenderPass = renderPass,
                 Subpass = 0,
                 BasePipelineHandle = default
             };
@@ -185,5 +195,121 @@ public unsafe class GraphicsPipeline
 
         SilkMarshal.Free((nint)vertShaderStageInfo.PName);
         SilkMarshal.Free((nint)fragShaderStageInfo.PName);
+    }
+
+    public void CreateRenderPass(Game game)
+    {
+        AttachmentDescription colorAttachment = new()
+        {
+            Format = game.swapChainImageFormat,
+            Samples = SampleCountFlags.Count1Bit,
+            LoadOp = AttachmentLoadOp.Clear,
+            StoreOp = AttachmentStoreOp.Store,
+            StencilLoadOp = AttachmentLoadOp.DontCare,
+            InitialLayout = ImageLayout.Undefined,
+            FinalLayout = ImageLayout.PresentSrcKhr,
+        };
+
+        AttachmentDescription depthAttachment = new()
+        {
+            Format = game.FindDepthFormat(),
+            Samples = SampleCountFlags.Count1Bit,
+            LoadOp = AttachmentLoadOp.Clear,
+            StoreOp = AttachmentStoreOp.DontCare,
+            StencilLoadOp = AttachmentLoadOp.DontCare,
+            StencilStoreOp = AttachmentStoreOp.DontCare,
+            InitialLayout = ImageLayout.Undefined,
+            FinalLayout = ImageLayout.DepthStencilAttachmentOptimal,
+        };
+
+        AttachmentReference colorAttachmentRef = new()
+        {
+            Attachment = 0,
+            Layout = ImageLayout.ColorAttachmentOptimal,
+        };
+
+        AttachmentReference depthAttachmentRef = new()
+        {
+            Attachment = 1,
+            Layout = ImageLayout.DepthStencilAttachmentOptimal,
+        };
+
+        SubpassDescription subpass = new()
+        {
+            PipelineBindPoint = PipelineBindPoint.Graphics,
+            ColorAttachmentCount = 1,
+            PColorAttachments = &colorAttachmentRef,
+            PDepthStencilAttachment = &depthAttachmentRef,
+        };
+
+        SubpassDependency dependency = new()
+        {
+            SrcSubpass = Vk.SubpassExternal,
+            DstSubpass = 0,
+            SrcStageMask = PipelineStageFlags.ColorAttachmentOutputBit | PipelineStageFlags.EarlyFragmentTestsBit,
+            SrcAccessMask = 0,
+            DstStageMask = PipelineStageFlags.ColorAttachmentOutputBit | PipelineStageFlags.EarlyFragmentTestsBit,
+            DstAccessMask = AccessFlags.ColorAttachmentWriteBit | AccessFlags.DepthStencilAttachmentWriteBit
+        };
+
+        var attachments = new[] { colorAttachment, depthAttachment };
+
+        fixed (AttachmentDescription* attachmentsPtr = attachments)
+        {
+            RenderPassCreateInfo renderPassInfo = new()
+            {
+                SType = StructureType.RenderPassCreateInfo,
+                AttachmentCount = (uint)attachments.Length,
+                PAttachments = attachmentsPtr,
+                SubpassCount = 1,
+                PSubpasses = &subpass,
+                DependencyCount = 1,
+                PDependencies = &dependency,
+            };
+
+            if (game.vk!.CreateRenderPass(game.device, in renderPassInfo, null, out renderPass) != Result.Success)
+            {
+                throw new Exception("failed to create render pass!");
+            }
+        }
+    }
+
+    public void CreateDescriptorSetLayout(Game game)
+    {
+        DescriptorSetLayoutBinding uboLayoutBinding = new()
+        {
+            Binding = 0,
+            DescriptorCount = 1,
+            DescriptorType = DescriptorType.UniformBuffer,
+            PImmutableSamplers = null,
+            StageFlags = ShaderStageFlags.VertexBit,
+        };
+
+        DescriptorSetLayoutBinding samplerLayoutBinding = new()
+        {
+            Binding = 1,
+            DescriptorCount = 1,
+            DescriptorType = DescriptorType.CombinedImageSampler,
+            PImmutableSamplers = null,
+            StageFlags = ShaderStageFlags.FragmentBit,
+        };
+
+        var bindings = new DescriptorSetLayoutBinding[] { uboLayoutBinding, samplerLayoutBinding };
+
+        fixed (DescriptorSetLayoutBinding* bindingsPtr = bindings)
+        fixed (DescriptorSetLayout* descriptorSetLayoutPtr = &descriptorSetLayout)
+        {
+            DescriptorSetLayoutCreateInfo layoutInfo = new()
+            {
+                SType = StructureType.DescriptorSetLayoutCreateInfo,
+                BindingCount = (uint)bindings.Length,
+                PBindings = bindingsPtr,
+            };
+
+            if (game.vk!.CreateDescriptorSetLayout(game.device, in layoutInfo, null, descriptorSetLayoutPtr) != Result.Success)
+            {
+                throw new Exception("failed to create descriptor set layout!");
+            }
+        }
     }
 }
