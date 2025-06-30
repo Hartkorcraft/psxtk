@@ -77,7 +77,7 @@ public unsafe class GraphicsInstance
 
     public string[] GetRequiredExtensions(Game game)
     {
-        var glfwExtensions = game.window!.VkSurface!.GetRequiredExtensions(out var glfwExtensionCount);
+        var glfwExtensions = game.gameWindow.window!.VkSurface!.GetRequiredExtensions(out var glfwExtensionCount);
         var extensions = SilkMarshal.PtrToStringArray((nint)glfwExtensions, (int)glfwExtensionCount);
 
         if (game.debugTools.enableValidationLayers)

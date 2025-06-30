@@ -21,6 +21,13 @@ public unsafe class RenderImage
     public ImageView textureImageView;
     public uint mipLevels;
 
+    public void Destroy(Game game)
+    {
+        game.vk!.DestroyImageView(game.renderDevice.device, textureImageView, null);
+        game.vk!.DestroyImage(game.renderDevice.device, textureImage, null);
+        game.vk!.FreeMemory(game.renderDevice.device, textureImageMemory, null);
+    }
+
     public ImageView CreateImageView(Game game, Image image, Format format, ImageAspectFlags aspectFlags, uint mipLevels)
     {
         ImageViewCreateInfo createInfo = new()
@@ -90,7 +97,7 @@ public unsafe class RenderImage
         {
             SType = StructureType.MemoryAllocateInfo,
             AllocationSize = memRequirements.Size,
-            MemoryTypeIndex = game.FindMemoryType(memRequirements.MemoryTypeBits, properties),
+            MemoryTypeIndex = Utilities.FindMemoryType(game, memRequirements.MemoryTypeBits, properties),
         };
 
         fixed (DeviceMemory* imageMemoryPtr = &imageMemory)

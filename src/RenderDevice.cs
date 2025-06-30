@@ -18,6 +18,12 @@ public unsafe class RenderDevice
     public Device device;
     public CommandPool commandPool;
 
+    public void Destroy(Game game)
+    {
+        game.vk!.DestroyCommandPool(device, commandPool, null);
+        game.vk!.DestroyDevice(device, null);
+    }
+
     public void PickPhysicalDevice(Game game)
     {
         var devices = game.vk!.GetPhysicalDevices(game.graphicsInstance.instance);

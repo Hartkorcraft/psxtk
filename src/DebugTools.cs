@@ -24,6 +24,15 @@ public unsafe class DebugTools
     public ExtDebugUtils? debugUtils;
     public DebugUtilsMessengerEXT debugMessenger;
 
+    public void Destroy(Game game)
+    {
+        if (enableValidationLayers)
+        {
+            //DestroyDebugUtilsMessenger equivilant to method DestroyDebugUtilsMessengerEXT from original tutorial.
+            debugUtils!.DestroyDebugUtilsMessenger(game.graphicsInstance.instance, debugMessenger, null);
+        }
+    }
+
     public void SetupDebugMessenger(Game game)
     {
         if (!enableValidationLayers) return;

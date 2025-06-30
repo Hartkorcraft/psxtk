@@ -16,21 +16,27 @@ public unsafe class Model
 {
     public const string MODEL_PATH = @"Assets\viking_room.obj";
 
+    public Buffer vertexBuffer;
+    public Buffer indexBuffer;
+
+    public Vertex[]? vertices;
+    public uint[]? indices;
+
     public void LoadModel(Game game)
     {
         using var assimp = Assimp.GetApi();
         var scene = assimp.ImportFile(MODEL_PATH, (uint)PostProcessPreset.TargetRealTimeMaximumQuality);
 
         var vertexMap = new Dictionary<Vertex, uint>();
-        var vertices = new List<Vertex>();
-        var indices = new List<uint>();
+        var tempVertices = new List<Vertex>();
+        var tempIndices = new List<uint>();
 
         VisitSceneNode(scene->MRootNode);
 
         assimp.ReleaseImport(scene);
 
-        game.vertices = [.. vertices];
-        game.indices = [.. indices];
+        vertices = [.. tempVertices];
+        indices = [.. tempIndices];
 
         void VisitSceneNode(Node* node)
         {
@@ -59,13 +65,13 @@ public unsafe class Model
 
                         if (vertexMap.TryGetValue(vertex, out var meshIndex))
                         {
-                            indices.Add(meshIndex);
+                            tempIndices.Add(meshIndex);
                         }
                         else
                         {
-                            indices.Add((uint)vertices.Count);
-                            vertexMap[vertex] = (uint)vertices.Count;
-                            vertices.Add(vertex);
+                            tempIndices.Add((uint)tempVertices.Count);
+                            vertexMap[vertex] = (uint)tempVertices.Count;
+                            tempVertices.Add(vertex);
                         }
                     }
                 }

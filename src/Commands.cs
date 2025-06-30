@@ -97,7 +97,7 @@ public unsafe class Commands
 
             game.vk!.CmdBindDescriptorSets(commandBuffers[i], PipelineBindPoint.Graphics, game.graphicsPipeline.pipelineLayout, 0, 1, in game.descriptors.descriptorSets![i], 0, null);
 
-            game.vk!.CmdDrawIndexed(commandBuffers[i], (uint)game.indices!.Length, 1, 0, 0, 0);
+            game.vk!.CmdDrawIndexed(commandBuffers[i], (uint)game.model.indices!.Length, 1, 0, 0, 0);
 
             game.vk!.CmdEndRenderPass(commandBuffers[i]);
 

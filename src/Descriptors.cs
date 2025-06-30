@@ -17,6 +17,11 @@ public unsafe class Descriptors
     public DescriptorPool descriptorPool;
     public DescriptorSet[]? descriptorSets;
 
+    public void Destroy(Game game)
+    {
+        game.vk!.DestroyDescriptorSetLayout(game.renderDevice.device, game.graphicsPipeline.descriptorSetLayout, null);
+    }
+    
     public void CreateDescriptorPool(Game game)
     {
         var poolSizes = new DescriptorPoolSize[]

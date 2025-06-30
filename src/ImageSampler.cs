@@ -16,6 +16,11 @@ public unsafe class ImageSampler
 {
     public Sampler textureSampler;
 
+    public void Destroy(Game game)
+    {
+        game.vk!.DestroySampler(game.renderDevice.device, textureSampler, null);
+    }
+
     public void CreateTextureSampler(Game game)
     {
         game.vk!.GetPhysicalDeviceProperties(game.renderDevice.physicalDevice, out PhysicalDeviceProperties properties);

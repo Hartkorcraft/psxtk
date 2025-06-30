@@ -42,7 +42,7 @@ public unsafe class RenderBuffer
         {
             SType = StructureType.MemoryAllocateInfo,
             AllocationSize = memRequirements.Size,
-            MemoryTypeIndex = game.FindMemoryType(memRequirements.MemoryTypeBits, properties),
+            MemoryTypeIndex = Utilities.FindMemoryType(game, memRequirements.MemoryTypeBits, properties),
         };
 
         fixed (DeviceMemory* bufferMemoryPtr = &bufferMemory)
@@ -58,7 +58,7 @@ public unsafe class RenderBuffer
 
     public void CreateVertexBuffer(Game game)
     {
-        ulong bufferSize = (ulong)(Unsafe.SizeOf<Vertex>() * game.vertices!.Length);
+        ulong bufferSize = (ulong)(Unsafe.SizeOf<Vertex>() * game.model.vertices!.Length);
 
         Buffer stagingBuffer = default;
         DeviceMemory stagingBufferMemory = default;
@@ -66,7 +66,7 @@ public unsafe class RenderBuffer
 
         void* data;
         game.vk!.MapMemory(game.renderDevice.device, stagingBufferMemory, 0, bufferSize, 0, &data);
-        game.vertices.AsSpan().CopyTo(new Span<Vertex>(data, game.vertices.Length));
+        game.model.vertices.AsSpan().CopyTo(new Span<Vertex>(data, game.model.vertices.Length));
         game.vk!.UnmapMemory(game.renderDevice.device, stagingBufferMemory);
 
         CreateBuffer(game, bufferSize, BufferUsageFlags.TransferDstBit | BufferUsageFlags.VertexBufferBit, MemoryPropertyFlags.DeviceLocalBit, ref game.vertexBuffer, ref vertexBufferMemory);
@@ -79,7 +79,7 @@ public unsafe class RenderBuffer
 
     public void CreateIndexBuffer(Game game)
     {
-        ulong bufferSize = (ulong)(Unsafe.SizeOf<uint>() * game.indices!.Length);
+        ulong bufferSize = (ulong)(Unsafe.SizeOf<uint>() * game.model.indices!.Length);
 
         Buffer stagingBuffer = default;
         DeviceMemory stagingBufferMemory = default;
@@ -87,7 +87,7 @@ public unsafe class RenderBuffer
 
         void* data;
         game.vk!.MapMemory(game.renderDevice.device, stagingBufferMemory, 0, bufferSize, 0, &data);
-        game.indices.AsSpan().CopyTo(new Span<uint>(data, game.indices.Length));
+        game.model.indices.AsSpan().CopyTo(new Span<uint>(data, game.model.indices.Length));
         game.vk!.UnmapMemory(game.renderDevice.device, stagingBufferMemory);
 
         CreateBuffer(game, bufferSize, BufferUsageFlags.TransferDstBit | BufferUsageFlags.IndexBufferBit, MemoryPropertyFlags.DeviceLocalBit, ref game.indexBuffer, ref indexBufferMemory);
@@ -129,7 +129,7 @@ public unsafe class RenderBuffer
     public void UpdateUniformBuffer(Game game, uint currentImage)
     {
         //Silk Window has timing information so we are skipping the time code.
-        var time = (float)game.window!.Time;
+        var time = (float)game.gameWindow.window!.Time;
 
         UniformBufferObject ubo = new()
         {

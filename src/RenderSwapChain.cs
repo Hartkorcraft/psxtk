@@ -14,6 +14,8 @@ using Semaphore = Silk.NET.Vulkan.Semaphore;
 
 public unsafe class RenderSwapChain
 {
+    public const int MAX_FRAMES_IN_FLIGHT = 2;
+
     public KhrSwapchain? khrSwapChain;
     public SwapchainKHR swapChain;
     public Image[]? swapChainImages;
@@ -22,6 +24,22 @@ public unsafe class RenderSwapChain
     public ImageView[]? swapChainImageViews;
     public Framebuffer[]? swapChainFramebuffers;
 
+    public Semaphore[]? imageAvailableSemaphores;
+    public Semaphore[]? renderFinishedSemaphores;
+    public Fence[]? inFlightFences;
+    public Fence[]? imagesInFlight;
+    public int currentFrame = 0;
+
+    public void Destroy(Game game)
+    {
+        CleanUpSwapChain(game);
+        for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
+        {
+            game.vk!.DestroySemaphore(game.renderDevice.device, renderFinishedSemaphores![i], null);
+            game.vk!.DestroySemaphore(game.renderDevice.device, imageAvailableSemaphores![i], null);
+            game.vk!.DestroyFence(game.renderDevice.device, inFlightFences![i], null);
+        }
+    }
 
     public void CleanUpSwapChain(Game game)
     {
@@ -135,12 +153,12 @@ public unsafe class RenderSwapChain
 
     public void RecreateSwapChain(Game game)
     {
-        Vector2D<int> framebufferSize = game.window!.FramebufferSize;
+        Vector2D<int> framebufferSize = game.gameWindow.window!.FramebufferSize;
 
         while (framebufferSize.X == 0 || framebufferSize.Y == 0)
         {
-            framebufferSize = game.window.FramebufferSize;
-            game.window.DoEvents();
+            framebufferSize = game.gameWindow.window.FramebufferSize;
+            game.gameWindow.window.DoEvents();
         }
 
         game.vk!.DeviceWaitIdle(game.renderDevice.device);
@@ -158,7 +176,7 @@ public unsafe class RenderSwapChain
         game.descriptors.CreateDescriptorSets(game);
         game.commands.CreateCommandBuffers(game);
 
-        game.imagesInFlight = new Fence[swapChainImages!.Length];
+        imagesInFlight = new Fence[swapChainImages!.Length];
     }
 
     public Extent2D ChooseSwapExtent(Game game, SurfaceCapabilitiesKHR capabilities)
@@ -169,7 +187,7 @@ public unsafe class RenderSwapChain
         }
         else
         {
-            var framebufferSize = game.window!.FramebufferSize;
+            var framebufferSize = game.gameWindow.window!.FramebufferSize;
 
             Extent2D actualExtent = new()
             {
@@ -287,6 +305,35 @@ public unsafe class RenderSwapChain
                 {
                     throw new Exception("failed to create framebuffer!");
                 }
+            }
+        }
+    }
+
+    public void CreateSyncObjects(Game game)
+    {
+        imageAvailableSemaphores = new Semaphore[MAX_FRAMES_IN_FLIGHT];
+        renderFinishedSemaphores = new Semaphore[MAX_FRAMES_IN_FLIGHT];
+        inFlightFences = new Fence[MAX_FRAMES_IN_FLIGHT];
+        imagesInFlight = new Fence[game.renderSwapChain.swapChainImages!.Length];
+
+        SemaphoreCreateInfo semaphoreInfo = new()
+        {
+            SType = StructureType.SemaphoreCreateInfo,
+        };
+
+        FenceCreateInfo fenceInfo = new()
+        {
+            SType = StructureType.FenceCreateInfo,
+            Flags = FenceCreateFlags.SignaledBit,
+        };
+
+        for (var i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
+        {
+            if (game.vk!.CreateSemaphore(game.renderDevice.device, in semaphoreInfo, null, out imageAvailableSemaphores[i]) != Result.Success ||
+                game.vk!.CreateSemaphore(game.renderDevice.device, in semaphoreInfo, null, out renderFinishedSemaphores[i]) != Result.Success ||
+                game.vk!.CreateFence(game.renderDevice.device, in fenceInfo, null, out inFlightFences[i]) != Result.Success)
+            {
+                throw new Exception("failed to create synchronization objects for a frame!");
             }
         }
     }
