@@ -12,7 +12,6 @@ using Buffer = Silk.NET.Vulkan.Buffer;
 using Image = Silk.NET.Vulkan.Image;
 using Semaphore = Silk.NET.Vulkan.Semaphore;
 
-
 public unsafe class GraphicsPipeline
 {
     public Pipeline graphicsPipeline;
@@ -347,7 +346,7 @@ public unsafe class GraphicsPipeline
         var waitSemaphores = stackalloc[] { game.imageAvailableSemaphores[game.currentFrame] };
         var waitStages = stackalloc[] { PipelineStageFlags.ColorAttachmentOutputBit };
 
-        var buffer = game.commandBuffers![imageIndex];
+        var commandsBuffer = game.commands.commandBuffers![imageIndex];
 
         submitInfo = submitInfo with
         {
@@ -356,7 +355,7 @@ public unsafe class GraphicsPipeline
             PWaitDstStageMask = waitStages,
 
             CommandBufferCount = 1,
-            PCommandBuffers = &buffer
+            PCommandBuffers = &commandsBuffer
         };
 
         var signalSemaphores = stackalloc[] { game.renderFinishedSemaphores![game.currentFrame] };
@@ -428,8 +427,8 @@ public unsafe class GraphicsPipeline
     {
         Format depthFormat = FindDepthFormat(game);
 
-        game.CreateImage(game.renderSwapChain.swapChainExtent.Width, game.renderSwapChain.swapChainExtent.Height, 1, depthFormat, ImageTiling.Optimal, ImageUsageFlags.DepthStencilAttachmentBit, MemoryPropertyFlags.DeviceLocalBit, ref game.depthImage, ref game.depthImageMemory);
-        game.depthImageView = game.CreateImageView(game.depthImage, depthFormat, ImageAspectFlags.DepthBit, 1);
+        game.renderImage.CreateImage(game, game.renderSwapChain.swapChainExtent.Width, game.renderSwapChain.swapChainExtent.Height, 1, depthFormat, ImageTiling.Optimal, ImageUsageFlags.DepthStencilAttachmentBit, MemoryPropertyFlags.DeviceLocalBit, ref game.depthImage, ref game.depthImageMemory);
+        game.depthImageView = game.renderImage.CreateImageView(game, game.depthImage, depthFormat, ImageAspectFlags.DepthBit, 1);
     }
 
     public Format FindSupportedFormat(Game game, IEnumerable<Format> candidates, ImageTiling tiling, FormatFeatureFlags features)

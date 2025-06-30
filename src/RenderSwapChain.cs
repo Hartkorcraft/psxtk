@@ -34,9 +34,9 @@ public unsafe class RenderSwapChain
             game.vk!.DestroyFramebuffer(game.renderDevice.device, framebuffer, null);
         }
 
-        fixed (CommandBuffer* commandBuffersPtr = game.commandBuffers)
+        fixed (CommandBuffer* commandBuffersPtr = game.commands.commandBuffers)
         {
-            game.vk!.FreeCommandBuffers(game.renderDevice.device, game.renderDevice.commandPool, (uint)game.commandBuffers!.Length, commandBuffersPtr);
+            game.vk!.FreeCommandBuffers(game.renderDevice.device, game.renderDevice.commandPool, (uint)game.commands.commandBuffers!.Length, commandBuffersPtr);
         }
 
         game.graphicsPipeline.CleanUp(game);
@@ -54,7 +54,7 @@ public unsafe class RenderSwapChain
             game.vk!.FreeMemory(game.renderDevice.device, game.uniformBuffersMemory![i], null);
         }
 
-        game.vk!.DestroyDescriptorPool(game.renderDevice.device, game.descriptorPool, null);
+        game.vk!.DestroyDescriptorPool(game.renderDevice.device, game.descriptors.descriptorPool, null);
     }
 
     public void CreateSwapChain(Game game)
@@ -154,9 +154,9 @@ public unsafe class RenderSwapChain
         game.graphicsPipeline.CreateDepthResources(game);
         CreateFramebuffers(game);
         game.renderBuffer.CreateUniformBuffers(game);
-        game.CreateDescriptorPool();
-        game.CreateDescriptorSets();
-        game.CreateCommandBuffers();
+        game.descriptors.CreateDescriptorPool(game);
+        game.descriptors.CreateDescriptorSets(game);
+        game.commands.CreateCommandBuffers(game);
 
         game.imagesInFlight = new Fence[swapChainImages!.Length];
     }
@@ -258,8 +258,7 @@ public unsafe class RenderSwapChain
 
         for (int i = 0; i < game.renderSwapChain.swapChainImages.Length; i++)
         {
-
-            game.renderSwapChain.swapChainImageViews[i] = game.CreateImageView(game.renderSwapChain.swapChainImages[i], game.renderSwapChain.swapChainImageFormat, ImageAspectFlags.ColorBit, 1);
+            game.renderSwapChain.swapChainImageViews[i] = game.renderImage.CreateImageView(game, game.renderSwapChain.swapChainImages[i], game.renderSwapChain.swapChainImageFormat, ImageAspectFlags.ColorBit, 1);
         }
     }
 

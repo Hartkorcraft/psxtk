@@ -14,6 +14,9 @@ using Semaphore = Silk.NET.Vulkan.Semaphore;
 
 public unsafe class RenderBuffer
 {
+    public DeviceMemory vertexBufferMemory;
+    public DeviceMemory indexBufferMemory;
+
     public void CreateBuffer(Game game, ulong size, BufferUsageFlags usage, MemoryPropertyFlags properties, ref Buffer buffer, ref DeviceMemory bufferMemory)
     {
         BufferCreateInfo bufferInfo = new()
@@ -66,7 +69,7 @@ public unsafe class RenderBuffer
         game.vertices.AsSpan().CopyTo(new Span<Vertex>(data, game.vertices.Length));
         game.vk!.UnmapMemory(game.renderDevice.device, stagingBufferMemory);
 
-        CreateBuffer(game, bufferSize, BufferUsageFlags.TransferDstBit | BufferUsageFlags.VertexBufferBit, MemoryPropertyFlags.DeviceLocalBit, ref game.vertexBuffer, ref game.vertexBufferMemory);
+        CreateBuffer(game, bufferSize, BufferUsageFlags.TransferDstBit | BufferUsageFlags.VertexBufferBit, MemoryPropertyFlags.DeviceLocalBit, ref game.vertexBuffer, ref vertexBufferMemory);
 
         CopyBuffer(game, stagingBuffer, game.vertexBuffer, bufferSize);
 
@@ -87,7 +90,7 @@ public unsafe class RenderBuffer
         game.indices.AsSpan().CopyTo(new Span<uint>(data, game.indices.Length));
         game.vk!.UnmapMemory(game.renderDevice.device, stagingBufferMemory);
 
-        CreateBuffer(game, bufferSize, BufferUsageFlags.TransferDstBit | BufferUsageFlags.IndexBufferBit, MemoryPropertyFlags.DeviceLocalBit, ref game.indexBuffer, ref game.indexBufferMemory);
+        CreateBuffer(game, bufferSize, BufferUsageFlags.TransferDstBit | BufferUsageFlags.IndexBufferBit, MemoryPropertyFlags.DeviceLocalBit, ref game.indexBuffer, ref indexBufferMemory);
 
         CopyBuffer(game, stagingBuffer, game.indexBuffer, bufferSize);
 
@@ -111,7 +114,7 @@ public unsafe class RenderBuffer
 
     public void CopyBuffer(Game game, Buffer srcBuffer, Buffer dstBuffer, ulong size)
     {
-        CommandBuffer commandBuffer = game.BeginSingleTimeCommands();
+        var commandBuffer = game.commands.BeginSingleTimeCommands(game);
 
         BufferCopy copyRegion = new()
         {
@@ -120,7 +123,7 @@ public unsafe class RenderBuffer
 
         game.vk!.CmdCopyBuffer(commandBuffer, srcBuffer, dstBuffer, 1, in copyRegion);
 
-        game.EndSingleTimeCommands(commandBuffer);
+        game.commands.EndSingleTimeCommands(game, commandBuffer);
     }
 
     public void UpdateUniformBuffer(Game game, uint currentImage)
@@ -141,4 +144,31 @@ public unsafe class RenderBuffer
         new Span<UniformBufferObject>(data, 1)[0] = ubo;
         game.vk!.UnmapMemory(game.renderDevice.device, game.uniformBuffersMemory![currentImage]);
     }
+
+    public void CopyBufferToImage(Game game, Buffer buffer, Image image, uint width, uint height)
+    {
+        var commandBuffer = game.commands.BeginSingleTimeCommands(game);
+
+        BufferImageCopy region = new()
+        {
+            BufferOffset = 0,
+            BufferRowLength = 0,
+            BufferImageHeight = 0,
+            ImageSubresource =
+            {
+                AspectMask = ImageAspectFlags.ColorBit,
+                MipLevel = 0,
+                BaseArrayLayer = 0,
+                LayerCount = 1,
+            },
+            ImageOffset = new Offset3D(0, 0, 0),
+            ImageExtent = new Extent3D(width, height, 1),
+
+        };
+
+        game.vk!.CmdCopyBufferToImage(commandBuffer, buffer, image, ImageLayout.TransferDstOptimal, 1, in region);
+
+        game.commands.EndSingleTimeCommands(game, commandBuffer);
+    }
+
 }
