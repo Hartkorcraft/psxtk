@@ -19,11 +19,11 @@ public unsafe class RenderDevice
 
     public void PickPhysicalDevice(Game game)
     {
-        var devices = game.vk!.GetPhysicalDevices(game.instance);
+        var devices = game.vk!.GetPhysicalDevices(game.graphicsInstance.instance);
 
         foreach (var device in devices)
         {
-            if (game.IsDeviceSuitable(device))
+            if (IsDeviceSuitable(game, device))
             {
                 physicalDevice = device;
                 break;
@@ -76,10 +76,10 @@ public unsafe class RenderDevice
             PpEnabledExtensionNames = (byte**)SilkMarshal.StringArrayToPtr(game.deviceExtensions)
         };
 
-        if (game.enableValidationLayers)
+        if (game.debugTools.enableValidationLayers)
         {
-            createInfo.EnabledLayerCount = (uint)game.validationLayers.Length;
-            createInfo.PpEnabledLayerNames = (byte**)SilkMarshal.StringArrayToPtr(game.validationLayers);
+            createInfo.EnabledLayerCount = (uint)game.debugTools.validationLayers.Length;
+            createInfo.PpEnabledLayerNames = (byte**)SilkMarshal.StringArrayToPtr(game.debugTools.validationLayers);
         }
         else
         {
@@ -94,12 +94,45 @@ public unsafe class RenderDevice
         game.vk!.GetDeviceQueue(device, indices.GraphicsFamily!.Value, 0, out game.graphicsQueue);
         game.vk!.GetDeviceQueue(device, indices.PresentFamily!.Value, 0, out game.presentQueue);
 
-        if (game.enableValidationLayers)
+        if (game.debugTools.enableValidationLayers)
         {
             SilkMarshal.Free((nint)createInfo.PpEnabledLayerNames);
         }
 
         SilkMarshal.Free((nint)createInfo.PpEnabledExtensionNames);
+    }
 
+    public bool IsDeviceSuitable(Game game, PhysicalDevice device)
+    {
+        var indices = game.FindQueueFamilies(device);
+
+        bool extensionsSupported = CheckDeviceExtensionsSupport(game, device);
+
+        bool swapChainAdequate = false;
+        if (extensionsSupported)
+        {
+            var swapChainSupport = game.renderSwapChain.QuerySwapChainSupport(game, device);
+            swapChainAdequate = swapChainSupport.Formats.Any() && swapChainSupport.PresentModes.Any();
+        }
+
+        game.vk!.GetPhysicalDeviceFeatures(device, out PhysicalDeviceFeatures supportedFeatures);
+
+        return indices.IsComplete() && extensionsSupported && swapChainAdequate && supportedFeatures.SamplerAnisotropy;
+    }
+
+    public bool CheckDeviceExtensionsSupport(Game game, PhysicalDevice device)
+    {
+        uint extentionsCount = 0;
+        game.vk!.EnumerateDeviceExtensionProperties(device, (byte*)null, ref extentionsCount, null);
+
+        var availableExtensions = new ExtensionProperties[extentionsCount];
+        fixed (ExtensionProperties* availableExtensionsPtr = availableExtensions)
+        {
+            game.vk!.EnumerateDeviceExtensionProperties(device, (byte*)null, ref extentionsCount, availableExtensionsPtr);
+        }
+
+        var availableExtensionNames = availableExtensions.Select(extension => Marshal.PtrToStringAnsi((IntPtr)extension.ExtensionName)).ToHashSet();
+
+        return game.deviceExtensions.All(availableExtensionNames.Contains);
     }
 }

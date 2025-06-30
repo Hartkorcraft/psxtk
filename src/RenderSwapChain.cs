@@ -59,11 +59,11 @@ public unsafe class RenderSwapChain
 
     public void CreateSwapChain(Game game)
     {
-        var swapChainSupport = game.QuerySwapChainSupport(game.renderDevice.physicalDevice);
+        var swapChainSupport = QuerySwapChainSupport(game, game.renderDevice.physicalDevice);
 
-        var surfaceFormat = game.ChooseSwapSurfaceFormat(swapChainSupport.Formats);
-        var presentMode = game.ChoosePresentMode(swapChainSupport.PresentModes);
-        var extent = game.ChooseSwapExtent(swapChainSupport.Capabilities);
+        var surfaceFormat = ChooseSwapSurfaceFormat(swapChainSupport.Formats);
+        var presentMode = ChoosePresentMode(swapChainSupport.PresentModes);
+        var extent = ChooseSwapExtent(game, swapChainSupport.Capabilities);
 
         var imageCount = swapChainSupport.Capabilities.MinImageCount + 1;
         if (swapChainSupport.Capabilities.MaxImageCount > 0 && imageCount > swapChainSupport.Capabilities.MaxImageCount)
@@ -111,7 +111,7 @@ public unsafe class RenderSwapChain
 
         if (khrSwapChain is null)
         {
-            if (!game.vk!.TryGetDeviceExtension(game.instance, game.renderDevice.device, out khrSwapChain))
+            if (!game.vk!.TryGetDeviceExtension(game.graphicsInstance.instance, game.renderDevice.device, out khrSwapChain))
             {
                 throw new NotSupportedException("VK_KHR_swapchain extension not found.");
             }
@@ -159,5 +159,96 @@ public unsafe class RenderSwapChain
         game.CreateCommandBuffers();
 
         game.imagesInFlight = new Fence[swapChainImages!.Length];
+    }
+
+    public Extent2D ChooseSwapExtent(Game game, SurfaceCapabilitiesKHR capabilities)
+    {
+        if (capabilities.CurrentExtent.Width != uint.MaxValue)
+        {
+            return capabilities.CurrentExtent;
+        }
+        else
+        {
+            var framebufferSize = game.window!.FramebufferSize;
+
+            Extent2D actualExtent = new()
+            {
+                Width = (uint)framebufferSize.X,
+                Height = (uint)framebufferSize.Y
+            };
+
+            actualExtent.Width = Math.Clamp(actualExtent.Width, capabilities.MinImageExtent.Width, capabilities.MaxImageExtent.Width);
+            actualExtent.Height = Math.Clamp(actualExtent.Height, capabilities.MinImageExtent.Height, capabilities.MaxImageExtent.Height);
+
+            return actualExtent;
+        }
+    }
+
+    public SwapChainSupportDetails QuerySwapChainSupport(Game game, PhysicalDevice physicalDevice)
+    {
+        var details = new SwapChainSupportDetails();
+
+        game.graphicsSurface.khrSurface!.GetPhysicalDeviceSurfaceCapabilities(physicalDevice, game.graphicsSurface.surface, out details.Capabilities);
+
+        uint formatCount = 0;
+        game.graphicsSurface.khrSurface.GetPhysicalDeviceSurfaceFormats(physicalDevice, game.graphicsSurface.surface, ref formatCount, null);
+
+        if (formatCount != 0)
+        {
+            details.Formats = new SurfaceFormatKHR[formatCount];
+            fixed (SurfaceFormatKHR* formatsPtr = details.Formats)
+            {
+                game.graphicsSurface.khrSurface.GetPhysicalDeviceSurfaceFormats(physicalDevice, game.graphicsSurface.surface, ref formatCount, formatsPtr);
+            }
+        }
+        else
+        {
+            details.Formats = Array.Empty<SurfaceFormatKHR>();
+        }
+
+        uint presentModeCount = 0;
+        game.graphicsSurface.khrSurface.GetPhysicalDeviceSurfacePresentModes(physicalDevice, game.graphicsSurface.surface, ref presentModeCount, null);
+
+        if (presentModeCount != 0)
+        {
+            details.PresentModes = new PresentModeKHR[presentModeCount];
+            fixed (PresentModeKHR* formatsPtr = details.PresentModes)
+            {
+                game.graphicsSurface.khrSurface.GetPhysicalDeviceSurfacePresentModes(physicalDevice, game.graphicsSurface.surface, ref presentModeCount, formatsPtr);
+            }
+
+        }
+        else
+        {
+            details.PresentModes = Array.Empty<PresentModeKHR>();
+        }
+
+        return details;
+    }
+
+    SurfaceFormatKHR ChooseSwapSurfaceFormat(IReadOnlyList<SurfaceFormatKHR> availableFormats)
+    {
+        foreach (var availableFormat in availableFormats)
+        {
+            if (availableFormat.Format == Format.B8G8R8A8Srgb && availableFormat.ColorSpace == ColorSpaceKHR.SpaceSrgbNonlinearKhr)
+            {
+                return availableFormat;
+            }
+        }
+
+        return availableFormats[0];
+    }
+
+    PresentModeKHR ChoosePresentMode(IReadOnlyList<PresentModeKHR> availablePresentModes)
+    {
+        foreach (var availablePresentMode in availablePresentModes)
+        {
+            if (availablePresentMode == PresentModeKHR.MailboxKhr)
+            {
+                return availablePresentMode;
+            }
+        }
+
+        return PresentModeKHR.FifoKhr;
     }
 }

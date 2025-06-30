@@ -17,20 +17,20 @@ app.Run();
 
 public unsafe class Game
 {
-    const int WIDTH = 800;
-    const int HEIGHT = 600;
+    public const int WIDTH = 800;
+    public const int HEIGHT = 600;
 
-    const string MODEL_PATH = @"Assets\viking_room.obj";
-    const string TEXTURE_PATH = @"Assets\viking_room.png";
+    public const string MODEL_PATH = @"Assets\viking_room.obj";
+    public const string TEXTURE_PATH = @"Assets\viking_room.png";
 
-    const int MAX_FRAMES_IN_FLIGHT = 2;
+    public const int MAX_FRAMES_IN_FLIGHT = 2;
 
-    public bool enableValidationLayers = true;
+    // public bool enableValidationLayers = true;
 
-    public readonly string[] validationLayers =
-    [
-        "VK_LAYER_KHRONOS_validation"
-    ];
+    // public readonly string[] validationLayers =
+    // [
+    //     "VK_LAYER_KHRONOS_validation"
+    // ];
 
     public readonly string[] deviceExtensions =
     [
@@ -40,10 +40,14 @@ public unsafe class Game
     public IWindow? window;
     public Vk? vk;
 
-    public Instance instance;
 
-    public ExtDebugUtils? debugUtils;
-    public DebugUtilsMessengerEXT debugMessenger;
+    // public Instance instance;
+    public GraphicsInstance graphicsInstance = new();
+
+
+    public DebugTools debugTools = new DebugTools();
+    // public ExtDebugUtils? debugUtils;
+    // public DebugUtilsMessengerEXT debugMessenger;
 
     public GraphicsSurface graphicsSurface = new GraphicsSurface();
     // public KhrSurface? khrSurface;
@@ -135,8 +139,8 @@ public unsafe class Game
 
     public void InitVulkan()
     {
-        CreateInstance();
-        SetupDebugMessenger();
+        graphicsInstance.CreateInstance(this);
+        debugTools.SetupDebugMessenger(this);
         graphicsSurface.CreateSurface(this);
         renderDevice.PickPhysicalDevice(this);
         renderDevice.CreateLogicalDevice(this);
@@ -163,7 +167,7 @@ public unsafe class Game
 
     public void MainLoop()
     {
-        window!.Render += DrawFrame;
+        window!.Render += (delta) => graphicsPipeline.DrawFrame(this, delta);
         window!.Run();
         vk!.DeviceWaitIdle(renderDevice.device);
     }
@@ -197,77 +201,20 @@ public unsafe class Game
 
         vk!.DestroyDevice(renderDevice.device, null);
 
-        if (enableValidationLayers)
+        if (debugTools.enableValidationLayers)
         {
             //DestroyDebugUtilsMessenger equivilant to method DestroyDebugUtilsMessengerEXT from original tutorial.
-            debugUtils!.DestroyDebugUtilsMessenger(instance, debugMessenger, null);
+            debugTools.debugUtils!.DestroyDebugUtilsMessenger(graphicsInstance.instance, debugTools.debugMessenger, null);
         }
 
-        graphicsSurface.khrSurface!.DestroySurface(instance, graphicsSurface.surface, null);
-        vk!.DestroyInstance(instance, null);
+        graphicsSurface.khrSurface!.DestroySurface(graphicsInstance.instance, graphicsSurface.surface, null);
+        vk!.DestroyInstance(graphicsInstance.instance, null);
         vk!.Dispose();
 
         window?.Dispose();
     }
 
-    public void CreateInstance()
-    {
-        vk = Vk.GetApi();
 
-        if (enableValidationLayers && !CheckValidationLayerSupport())
-        {
-            throw new Exception("validation layers requested, but not available!");
-        }
-
-        ApplicationInfo appInfo = new()
-        {
-            SType = StructureType.ApplicationInfo,
-            PApplicationName = (byte*)Marshal.StringToHGlobalAnsi("Hello Triangle"),
-            ApplicationVersion = new Version32(1, 0, 0),
-            PEngineName = (byte*)Marshal.StringToHGlobalAnsi("No Engine"),
-            EngineVersion = new Version32(1, 0, 0),
-            ApiVersion = Vk.Version12
-        };
-
-        InstanceCreateInfo createInfo = new()
-        {
-            SType = StructureType.InstanceCreateInfo,
-            PApplicationInfo = &appInfo
-        };
-
-        var extensions = GetRequiredExtensions();
-        createInfo.EnabledExtensionCount = (uint)extensions.Length;
-        createInfo.PpEnabledExtensionNames = (byte**)SilkMarshal.StringArrayToPtr(extensions); ;
-
-        if (enableValidationLayers)
-        {
-            createInfo.EnabledLayerCount = (uint)validationLayers.Length;
-            createInfo.PpEnabledLayerNames = (byte**)SilkMarshal.StringArrayToPtr(validationLayers);
-
-            DebugUtilsMessengerCreateInfoEXT debugCreateInfo = new();
-            PopulateDebugMessengerCreateInfo(ref debugCreateInfo);
-            createInfo.PNext = &debugCreateInfo;
-        }
-        else
-        {
-            createInfo.EnabledLayerCount = 0;
-            createInfo.PNext = null;
-        }
-
-        if (vk.CreateInstance(in createInfo, null, out instance) != Result.Success)
-        {
-            throw new Exception("failed to create instance!");
-        }
-
-        Marshal.FreeHGlobal((IntPtr)appInfo.PApplicationName);
-        Marshal.FreeHGlobal((IntPtr)appInfo.PEngineName);
-        SilkMarshal.Free((nint)createInfo.PpEnabledExtensionNames);
-
-        if (enableValidationLayers)
-        {
-            SilkMarshal.Free((nint)createInfo.PpEnabledLayerNames);
-        }
-    }
 
     public void PopulateDebugMessengerCreateInfo(ref DebugUtilsMessengerCreateInfoEXT createInfo)
     {
@@ -281,21 +228,7 @@ public unsafe class Game
         createInfo.PfnUserCallback = (DebugUtilsMessengerCallbackFunctionEXT)DebugCallback;
     }
 
-    public void SetupDebugMessenger()
-    {
-        if (!enableValidationLayers) return;
 
-        //TryGetInstanceExtension equivilant to method CreateDebugUtilsMessengerEXT from original tutorial.
-        if (!vk!.TryGetInstanceExtension(instance, out debugUtils)) return;
-
-        DebugUtilsMessengerCreateInfoEXT createInfo = new();
-        PopulateDebugMessengerCreateInfo(ref createInfo);
-
-        if (debugUtils!.CreateDebugUtilsMessenger(instance, in createInfo, null, out debugMessenger) != Result.Success)
-        {
-            throw new Exception("failed to set up debug messenger!");
-        }
-    }
 
     public void CreateImageViews()
     {
@@ -1200,245 +1133,6 @@ public unsafe class Game
 
     }
 
-    public void DrawFrame(double delta)
-    {
-        vk!.WaitForFences(renderDevice.device, 1, in inFlightFences![currentFrame], true, ulong.MaxValue);
-
-        uint imageIndex = 0;
-        var result = renderSwapChain.khrSwapChain!.AcquireNextImage(renderDevice.device, renderSwapChain.swapChain, ulong.MaxValue, imageAvailableSemaphores![currentFrame], default, ref imageIndex);
-
-        if (result == Result.ErrorOutOfDateKhr)
-        {
-            renderSwapChain.RecreateSwapChain(this);
-            return;
-        }
-        else if (result != Result.Success && result != Result.SuboptimalKhr)
-        {
-            throw new Exception("failed to acquire swap chain image!");
-        }
-
-        UpdateUniformBuffer(imageIndex);
-
-        if (imagesInFlight![imageIndex].Handle != default)
-        {
-            vk!.WaitForFences(renderDevice.device, 1, in imagesInFlight[imageIndex], true, ulong.MaxValue);
-        }
-        imagesInFlight[imageIndex] = inFlightFences[currentFrame];
-
-        SubmitInfo submitInfo = new()
-        {
-            SType = StructureType.SubmitInfo,
-        };
-
-        var waitSemaphores = stackalloc[] { imageAvailableSemaphores[currentFrame] };
-        var waitStages = stackalloc[] { PipelineStageFlags.ColorAttachmentOutputBit };
-
-        var buffer = commandBuffers![imageIndex];
-
-        submitInfo = submitInfo with
-        {
-            WaitSemaphoreCount = 1,
-            PWaitSemaphores = waitSemaphores,
-            PWaitDstStageMask = waitStages,
-
-            CommandBufferCount = 1,
-            PCommandBuffers = &buffer
-        };
-
-        var signalSemaphores = stackalloc[] { renderFinishedSemaphores![currentFrame] };
-        submitInfo = submitInfo with
-        {
-            SignalSemaphoreCount = 1,
-            PSignalSemaphores = signalSemaphores,
-        };
-
-        vk!.ResetFences(renderDevice.device, 1, in inFlightFences[currentFrame]);
-
-        if (vk!.QueueSubmit(graphicsQueue, 1, in submitInfo, inFlightFences[currentFrame]) != Result.Success)
-        {
-            throw new Exception("failed to submit draw command buffer!");
-        }
-
-        var swapChains = stackalloc[] { renderSwapChain.swapChain };
-        PresentInfoKHR presentInfo = new()
-        {
-            SType = StructureType.PresentInfoKhr,
-
-            WaitSemaphoreCount = 1,
-            PWaitSemaphores = signalSemaphores,
-
-            SwapchainCount = 1,
-            PSwapchains = swapChains,
-
-            PImageIndices = &imageIndex
-        };
-
-        result = renderSwapChain.khrSwapChain.QueuePresent(presentQueue, in presentInfo);
-
-        if (result == Result.ErrorOutOfDateKhr || result == Result.SuboptimalKhr || frameBufferResized)
-        {
-            frameBufferResized = false;
-            renderSwapChain.RecreateSwapChain(this);
-        }
-        else if (result != Result.Success)
-        {
-            throw new Exception("failed to present swap chain image!");
-        }
-
-        currentFrame = (currentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
-
-    }
-
-    public ShaderModule CreateShaderModule(byte[] code)
-    {
-        ShaderModuleCreateInfo createInfo = new()
-        {
-            SType = StructureType.ShaderModuleCreateInfo,
-            CodeSize = (nuint)code.Length,
-        };
-
-        ShaderModule shaderModule;
-
-        fixed (byte* codePtr = code)
-        {
-            createInfo.PCode = (uint*)codePtr;
-
-            if (vk!.CreateShaderModule(renderDevice.device, in createInfo, null, out shaderModule) != Result.Success)
-            {
-                throw new Exception();
-            }
-        }
-
-        return shaderModule;
-
-    }
-
-    public SurfaceFormatKHR ChooseSwapSurfaceFormat(IReadOnlyList<SurfaceFormatKHR> availableFormats)
-    {
-        foreach (var availableFormat in availableFormats)
-        {
-            if (availableFormat.Format == Format.B8G8R8A8Srgb && availableFormat.ColorSpace == ColorSpaceKHR.SpaceSrgbNonlinearKhr)
-            {
-                return availableFormat;
-            }
-        }
-
-        return availableFormats[0];
-    }
-
-    public PresentModeKHR ChoosePresentMode(IReadOnlyList<PresentModeKHR> availablePresentModes)
-    {
-        foreach (var availablePresentMode in availablePresentModes)
-        {
-            if (availablePresentMode == PresentModeKHR.MailboxKhr)
-            {
-                return availablePresentMode;
-            }
-        }
-
-        return PresentModeKHR.FifoKhr;
-    }
-
-    public Extent2D ChooseSwapExtent(SurfaceCapabilitiesKHR capabilities)
-    {
-        if (capabilities.CurrentExtent.Width != uint.MaxValue)
-        {
-            return capabilities.CurrentExtent;
-        }
-        else
-        {
-            var framebufferSize = window!.FramebufferSize;
-
-            Extent2D actualExtent = new()
-            {
-                Width = (uint)framebufferSize.X,
-                Height = (uint)framebufferSize.Y
-            };
-
-            actualExtent.Width = Math.Clamp(actualExtent.Width, capabilities.MinImageExtent.Width, capabilities.MaxImageExtent.Width);
-            actualExtent.Height = Math.Clamp(actualExtent.Height, capabilities.MinImageExtent.Height, capabilities.MaxImageExtent.Height);
-
-            return actualExtent;
-        }
-    }
-
-    public SwapChainSupportDetails QuerySwapChainSupport(PhysicalDevice physicalDevice)
-    {
-        var details = new SwapChainSupportDetails();
-
-        graphicsSurface.khrSurface!.GetPhysicalDeviceSurfaceCapabilities(physicalDevice, graphicsSurface.surface, out details.Capabilities);
-
-        uint formatCount = 0;
-        graphicsSurface.khrSurface.GetPhysicalDeviceSurfaceFormats(physicalDevice, graphicsSurface.surface, ref formatCount, null);
-
-        if (formatCount != 0)
-        {
-            details.Formats = new SurfaceFormatKHR[formatCount];
-            fixed (SurfaceFormatKHR* formatsPtr = details.Formats)
-            {
-                graphicsSurface.khrSurface.GetPhysicalDeviceSurfaceFormats(physicalDevice, graphicsSurface.surface, ref formatCount, formatsPtr);
-            }
-        }
-        else
-        {
-            details.Formats = Array.Empty<SurfaceFormatKHR>();
-        }
-
-        uint presentModeCount = 0;
-        graphicsSurface.khrSurface.GetPhysicalDeviceSurfacePresentModes(physicalDevice, graphicsSurface.surface, ref presentModeCount, null);
-
-        if (presentModeCount != 0)
-        {
-            details.PresentModes = new PresentModeKHR[presentModeCount];
-            fixed (PresentModeKHR* formatsPtr = details.PresentModes)
-            {
-                graphicsSurface.khrSurface.GetPhysicalDeviceSurfacePresentModes(physicalDevice, graphicsSurface.surface, ref presentModeCount, formatsPtr);
-            }
-
-        }
-        else
-        {
-            details.PresentModes = Array.Empty<PresentModeKHR>();
-        }
-
-        return details;
-    }
-
-    public bool IsDeviceSuitable(PhysicalDevice device)
-    {
-        var indices = FindQueueFamilies(device);
-
-        bool extensionsSupported = CheckDeviceExtensionsSupport(device);
-
-        bool swapChainAdequate = false;
-        if (extensionsSupported)
-        {
-            var swapChainSupport = QuerySwapChainSupport(device);
-            swapChainAdequate = swapChainSupport.Formats.Any() && swapChainSupport.PresentModes.Any();
-        }
-
-        vk!.GetPhysicalDeviceFeatures(device, out PhysicalDeviceFeatures supportedFeatures);
-
-        return indices.IsComplete() && extensionsSupported && swapChainAdequate && supportedFeatures.SamplerAnisotropy;
-    }
-
-    public bool CheckDeviceExtensionsSupport(PhysicalDevice device)
-    {
-        uint extentionsCount = 0;
-        vk!.EnumerateDeviceExtensionProperties(device, (byte*)null, ref extentionsCount, null);
-
-        var availableExtensions = new ExtensionProperties[extentionsCount];
-        fixed (ExtensionProperties* availableExtensionsPtr = availableExtensions)
-        {
-            vk!.EnumerateDeviceExtensionProperties(device, (byte*)null, ref extentionsCount, availableExtensionsPtr);
-        }
-
-        var availableExtensionNames = availableExtensions.Select(extension => Marshal.PtrToStringAnsi((IntPtr)extension.ExtensionName)).ToHashSet();
-
-        return deviceExtensions.All(availableExtensionNames.Contains);
-
-    }
-
     public QueueFamilyIndices FindQueueFamilies(PhysicalDevice device)
     {
         var indices = new QueueFamilyIndices();
@@ -1477,34 +1171,6 @@ public unsafe class Game
         }
 
         return indices;
-    }
-
-    public string[] GetRequiredExtensions()
-    {
-        var glfwExtensions = window!.VkSurface!.GetRequiredExtensions(out var glfwExtensionCount);
-        var extensions = SilkMarshal.PtrToStringArray((nint)glfwExtensions, (int)glfwExtensionCount);
-
-        if (enableValidationLayers)
-        {
-            return extensions.Append(ExtDebugUtils.ExtensionName).ToArray();
-        }
-
-        return extensions;
-    }
-
-    public bool CheckValidationLayerSupport()
-    {
-        uint layerCount = 0;
-        vk!.EnumerateInstanceLayerProperties(ref layerCount, null);
-        var availableLayers = new LayerProperties[layerCount];
-        fixed (LayerProperties* availableLayersPtr = availableLayers)
-        {
-            vk!.EnumerateInstanceLayerProperties(ref layerCount, availableLayersPtr);
-        }
-
-        var availableLayerNames = availableLayers.Select(layer => Marshal.PtrToStringAnsi((IntPtr)layer.LayerName)).ToHashSet();
-
-        return validationLayers.All(availableLayerNames.Contains);
     }
 
     public uint DebugCallback(DebugUtilsMessageSeverityFlagsEXT messageSeverity, DebugUtilsMessageTypeFlagsEXT messageTypes, DebugUtilsMessengerCallbackDataEXT* pCallbackData, void* pUserData)

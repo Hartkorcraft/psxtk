@@ -31,8 +31,8 @@ public unsafe class GraphicsPipeline
         var vertShaderCode = System.IO.File.ReadAllBytes("shaders/vert.spv");
         var fragShaderCode = System.IO.File.ReadAllBytes("shaders/frag.spv");
 
-        var vertShaderModule = game.CreateShaderModule(vertShaderCode);
-        var fragShaderModule = game.CreateShaderModule(fragShaderCode);
+        var vertShaderModule = CreateShaderModule(game, vertShaderCode);
+        var fragShaderModule = CreateShaderModule(game, fragShaderCode);
 
         PipelineShaderStageCreateInfo vertShaderStageInfo = new()
         {
@@ -311,5 +311,115 @@ public unsafe class GraphicsPipeline
                 throw new Exception("failed to create descriptor set layout!");
             }
         }
+    }
+
+    public void DrawFrame(Game game, double delta)
+    {
+        game.vk!.WaitForFences(game.renderDevice.device, 1, in game.inFlightFences![game.currentFrame], true, ulong.MaxValue);
+
+        uint imageIndex = 0;
+        var result = game.renderSwapChain.khrSwapChain!.AcquireNextImage(game.renderDevice.device, game.renderSwapChain.swapChain, ulong.MaxValue, game.imageAvailableSemaphores![game.currentFrame], default, ref imageIndex);
+
+        if (result == Result.ErrorOutOfDateKhr)
+        {
+            game.renderSwapChain.RecreateSwapChain(game);
+            return;
+        }
+        else if (result != Result.Success && result != Result.SuboptimalKhr)
+        {
+            throw new Exception("failed to acquire swap chain image!");
+        }
+
+        game.UpdateUniformBuffer(imageIndex);
+
+        if (game.imagesInFlight![imageIndex].Handle != default)
+        {
+            game.vk!.WaitForFences(game.renderDevice.device, 1, in game.imagesInFlight[imageIndex], true, ulong.MaxValue);
+        }
+        game.imagesInFlight[imageIndex] = game.inFlightFences[game.currentFrame];
+
+        SubmitInfo submitInfo = new()
+        {
+            SType = StructureType.SubmitInfo,
+        };
+
+        var waitSemaphores = stackalloc[] { game.imageAvailableSemaphores[game.currentFrame] };
+        var waitStages = stackalloc[] { PipelineStageFlags.ColorAttachmentOutputBit };
+
+        var buffer = game.commandBuffers![imageIndex];
+
+        submitInfo = submitInfo with
+        {
+            WaitSemaphoreCount = 1,
+            PWaitSemaphores = waitSemaphores,
+            PWaitDstStageMask = waitStages,
+
+            CommandBufferCount = 1,
+            PCommandBuffers = &buffer
+        };
+
+        var signalSemaphores = stackalloc[] { game.renderFinishedSemaphores![game.currentFrame] };
+        submitInfo = submitInfo with
+        {
+            SignalSemaphoreCount = 1,
+            PSignalSemaphores = signalSemaphores,
+        };
+
+        game.vk!.ResetFences(game.renderDevice.device, 1, in game.inFlightFences[game.currentFrame]);
+
+        if (game.vk!.QueueSubmit(game.graphicsQueue, 1, in submitInfo, game.inFlightFences[game.currentFrame]) != Result.Success)
+        {
+            throw new Exception("failed to submit draw command buffer!");
+        }
+
+        var swapChains = stackalloc[] { game.renderSwapChain.swapChain };
+        PresentInfoKHR presentInfo = new()
+        {
+            SType = StructureType.PresentInfoKhr,
+
+            WaitSemaphoreCount = 1,
+            PWaitSemaphores = signalSemaphores,
+
+            SwapchainCount = 1,
+            PSwapchains = swapChains,
+
+            PImageIndices = &imageIndex
+        };
+
+        result = game.renderSwapChain.khrSwapChain.QueuePresent(game.presentQueue, in presentInfo);
+
+        if (result == Result.ErrorOutOfDateKhr || result == Result.SuboptimalKhr || game.frameBufferResized)
+        {
+            game.frameBufferResized = false;
+            game.renderSwapChain.RecreateSwapChain(game);
+        }
+        else if (result != Result.Success)
+        {
+            throw new Exception("failed to present swap chain image!");
+        }
+
+        game.currentFrame = (game.currentFrame + 1) % Game.MAX_FRAMES_IN_FLIGHT;
+    }
+
+    public ShaderModule CreateShaderModule(Game game, byte[] code)
+    {
+        ShaderModuleCreateInfo createInfo = new()
+        {
+            SType = StructureType.ShaderModuleCreateInfo,
+            CodeSize = (nuint)code.Length,
+        };
+
+        ShaderModule shaderModule;
+
+        fixed (byte* codePtr = code)
+        {
+            createInfo.PCode = (uint*)codePtr;
+
+            if (game.vk!.CreateShaderModule(game.renderDevice.device, in createInfo, null, out shaderModule) != Result.Success)
+            {
+                throw new Exception();
+            }
+        }
+        return shaderModule;
     }
 }

@@ -19,12 +19,12 @@ public unsafe class GraphicsSurface
 
     public void CreateSurface(Game game)
     {
-        if (!game.vk!.TryGetInstanceExtension<KhrSurface>(game.instance, out khrSurface))
+        if (!game.vk!.TryGetInstanceExtension<KhrSurface>(game.graphicsInstance.instance, out khrSurface))
         {
             throw new NotSupportedException("KHR_surface extension not found.");
         }
 
-        surface = game.window!.VkSurface!.Create<AllocationCallbacks>(game.instance.ToHandle(), null).ToSurface();
+        surface = game.window!.VkSurface!.Create<AllocationCallbacks>(game.graphicsInstance.instance.ToHandle(), null).ToSurface();
     }
 
 }
