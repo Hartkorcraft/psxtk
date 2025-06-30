@@ -330,7 +330,7 @@ public unsafe class GraphicsPipeline
             throw new Exception("failed to acquire swap chain image!");
         }
 
-        game.UpdateUniformBuffer(imageIndex);
+        game.renderBuffer.UpdateUniformBuffer(game, imageIndex);
 
         if (game.imagesInFlight![imageIndex].Handle != default)
         {

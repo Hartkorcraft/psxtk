@@ -16,6 +16,7 @@ public unsafe class RenderDevice
 {
     public PhysicalDevice physicalDevice;
     public Device device;
+    public CommandPool commandPool;
 
     public void PickPhysicalDevice(Game game)
     {
@@ -38,7 +39,7 @@ public unsafe class RenderDevice
 
     public void CreateLogicalDevice(Game game)
     {
-        var indices = game.FindQueueFamilies(physicalDevice);
+        var indices = FindQueueFamilies(game, physicalDevice);
 
         var uniqueQueueFamilies = new[] { indices.GraphicsFamily!.Value, indices.PresentFamily!.Value };
         uniqueQueueFamilies = uniqueQueueFamilies.Distinct().ToArray();
@@ -104,7 +105,7 @@ public unsafe class RenderDevice
 
     public bool IsDeviceSuitable(Game game, PhysicalDevice device)
     {
-        var indices = game.FindQueueFamilies(device);
+        var indices = FindQueueFamilies(game, device);
 
         bool extensionsSupported = CheckDeviceExtensionsSupport(game, device);
 
@@ -134,5 +135,60 @@ public unsafe class RenderDevice
         var availableExtensionNames = availableExtensions.Select(extension => Marshal.PtrToStringAnsi((IntPtr)extension.ExtensionName)).ToHashSet();
 
         return game.deviceExtensions.All(availableExtensionNames.Contains);
+    }
+
+    public QueueFamilyIndices FindQueueFamilies(Game game, PhysicalDevice device)
+    {
+        var indices = new QueueFamilyIndices();
+
+        uint queueFamilityCount = 0;
+        game.vk!.GetPhysicalDeviceQueueFamilyProperties(device, ref queueFamilityCount, null);
+
+        var queueFamilies = new QueueFamilyProperties[queueFamilityCount];
+        fixed (QueueFamilyProperties* queueFamiliesPtr = queueFamilies)
+        {
+            game.vk!.GetPhysicalDeviceQueueFamilyProperties(device, ref queueFamilityCount, queueFamiliesPtr);
+        }
+
+        uint i = 0;
+        foreach (var queueFamily in queueFamilies)
+        {
+            if (queueFamily.QueueFlags.HasFlag(QueueFlags.GraphicsBit))
+            {
+                indices.GraphicsFamily = i;
+            }
+
+            game.graphicsSurface.khrSurface!.GetPhysicalDeviceSurfaceSupport(device, i, game.graphicsSurface.surface, out var presentSupport);
+
+            if (presentSupport)
+            {
+                indices.PresentFamily = i;
+            }
+
+            if (indices.IsComplete())
+            {
+                break;
+            }
+
+            i++;
+        }
+
+        return indices;
+    }
+
+    public void CreateCommandPool(Game game)
+    {
+        var queueFamiliyIndicies = FindQueueFamilies(game, game.renderDevice.physicalDevice);
+
+        CommandPoolCreateInfo poolInfo = new()
+        {
+            SType = StructureType.CommandPoolCreateInfo,
+            QueueFamilyIndex = queueFamiliyIndicies.GraphicsFamily!.Value,
+        };
+
+        if (game.vk!.CreateCommandPool(game.renderDevice.device, in poolInfo, null, out commandPool) != Result.Success)
+        {
+            throw new Exception("failed to create command pool!");
+        }
     }
 }

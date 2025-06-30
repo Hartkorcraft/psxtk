@@ -36,7 +36,7 @@ public unsafe class RenderSwapChain
 
         fixed (CommandBuffer* commandBuffersPtr = game.commandBuffers)
         {
-            game.vk!.FreeCommandBuffers(game.renderDevice.device, game.commandPool, (uint)game.commandBuffers!.Length, commandBuffersPtr);
+            game.vk!.FreeCommandBuffers(game.renderDevice.device, game.renderDevice.commandPool, (uint)game.commandBuffers!.Length, commandBuffersPtr);
         }
 
         game.graphicsPipeline.CleanUp(game);
@@ -84,7 +84,7 @@ public unsafe class RenderSwapChain
             ImageUsage = ImageUsageFlags.ColorAttachmentBit,
         };
 
-        var indices = game.FindQueueFamilies(game.renderDevice.physicalDevice);
+        var indices = game.renderDevice.FindQueueFamilies(game, game.renderDevice.physicalDevice);
         var queueFamilyIndices = stackalloc[] { indices.GraphicsFamily!.Value, indices.PresentFamily!.Value };
 
         if (indices.GraphicsFamily != indices.PresentFamily)
@@ -153,7 +153,7 @@ public unsafe class RenderSwapChain
         game.graphicsPipeline.CreateGraphicsPipeline(game);
         game.CreateDepthResources();
         game.CreateFramebuffers();
-        game.CreateUniformBuffers();
+        game.renderBuffer.CreateUniformBuffers(game);
         game.CreateDescriptorPool();
         game.CreateDescriptorSets();
         game.CreateCommandBuffers();

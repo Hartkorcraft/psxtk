@@ -32,11 +32,30 @@ public unsafe class DebugTools
         if (!game.vk!.TryGetInstanceExtension(game.graphicsInstance.instance, out debugUtils)) return;
 
         DebugUtilsMessengerCreateInfoEXT createInfo = new();
-        game.PopulateDebugMessengerCreateInfo(ref createInfo);
+        PopulateDebugMessengerCreateInfo(ref createInfo);
 
         if (debugUtils!.CreateDebugUtilsMessenger(game.graphicsInstance.instance, in createInfo, null, out debugMessenger) != Result.Success)
         {
             throw new Exception("failed to set up debug messenger!");
         }
+    }
+
+    public void PopulateDebugMessengerCreateInfo(ref DebugUtilsMessengerCreateInfoEXT createInfo)
+    {
+        createInfo.SType = StructureType.DebugUtilsMessengerCreateInfoExt;
+        createInfo.MessageSeverity = DebugUtilsMessageSeverityFlagsEXT.VerboseBitExt |
+                                     DebugUtilsMessageSeverityFlagsEXT.WarningBitExt |
+                                     DebugUtilsMessageSeverityFlagsEXT.ErrorBitExt;
+        createInfo.MessageType = DebugUtilsMessageTypeFlagsEXT.GeneralBitExt |
+                                 DebugUtilsMessageTypeFlagsEXT.PerformanceBitExt |
+                                 DebugUtilsMessageTypeFlagsEXT.ValidationBitExt;
+        createInfo.PfnUserCallback = (DebugUtilsMessengerCallbackFunctionEXT)DebugCallback;
+    }
+
+    uint DebugCallback(DebugUtilsMessageSeverityFlagsEXT messageSeverity, DebugUtilsMessageTypeFlagsEXT messageTypes, DebugUtilsMessengerCallbackDataEXT* pCallbackData, void* pUserData)
+    {
+        System.Diagnostics.Debug.WriteLine($"validation layer:" + Marshal.PtrToStringAnsi((nint)pCallbackData->PMessage));
+
+        return Vk.False;
     }
 }

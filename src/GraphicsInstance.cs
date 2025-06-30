@@ -51,7 +51,7 @@ public unsafe class GraphicsInstance
             createInfo.PpEnabledLayerNames = (byte**)SilkMarshal.StringArrayToPtr(game.debugTools.validationLayers);
 
             DebugUtilsMessengerCreateInfoEXT debugCreateInfo = new();
-            game.PopulateDebugMessengerCreateInfo(ref debugCreateInfo);
+            game.debugTools.PopulateDebugMessengerCreateInfo(ref debugCreateInfo);
             createInfo.PNext = &debugCreateInfo;
         }
         else

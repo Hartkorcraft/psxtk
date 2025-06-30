@@ -20,7 +20,6 @@ public unsafe class Game
     public const int WIDTH = 800;
     public const int HEIGHT = 600;
 
-    public const string MODEL_PATH = @"Assets\viking_room.obj";
     public const string TEXTURE_PATH = @"Assets\viking_room.png";
 
     public const int MAX_FRAMES_IN_FLIGHT = 2;
@@ -67,7 +66,6 @@ public unsafe class Game
     // public DescriptorSetLayout descriptorSetLayout;
     // public PipelineLayout pipelineLayout;
 
-    public CommandPool commandPool;
 
     public Image depthImage;
     public DeviceMemory depthImageMemory;
@@ -83,6 +81,9 @@ public unsafe class Game
     public DeviceMemory vertexBufferMemory;
     public Buffer indexBuffer;
     public DeviceMemory indexBufferMemory;
+
+
+    public RenderBuffer renderBuffer = new();
 
     public Buffer[]? uniformBuffers;
     public DeviceMemory[]? uniformBuffersMemory;
@@ -103,6 +104,8 @@ public unsafe class Game
     public Vertex[]? vertices;
 
     public uint[]? indices;
+
+    public Model model = new();
 
     public void Run()
     {
@@ -149,16 +152,16 @@ public unsafe class Game
         graphicsPipeline.CreateRenderPass(this);
         graphicsPipeline.CreateDescriptorSetLayout(this);
         graphicsPipeline.CreateGraphicsPipeline(this);
-        CreateCommandPool();
+        renderDevice.CreateCommandPool(this);
         CreateDepthResources();
         CreateFramebuffers();
         CreateTextureImage();
         CreateTextureImageView();
         CreateTextureSampler();
-        LoadModel();
-        CreateVertexBuffer();
-        CreateIndexBuffer();
-        CreateUniformBuffers();
+        model.LoadModel(this);
+        renderBuffer.CreateVertexBuffer(this);
+        renderBuffer.CreateIndexBuffer(this);
+        renderBuffer.CreateUniformBuffers(this);
         CreateDescriptorPool();
         CreateDescriptorSets();
         CreateCommandBuffers();
@@ -197,7 +200,7 @@ public unsafe class Game
             vk!.DestroyFence(renderDevice.device, inFlightFences![i], null);
         }
 
-        vk!.DestroyCommandPool(renderDevice.device, commandPool, null);
+        vk!.DestroyCommandPool(renderDevice.device, renderDevice.commandPool, null);
 
         vk!.DestroyDevice(renderDevice.device, null);
 
@@ -213,22 +216,6 @@ public unsafe class Game
 
         window?.Dispose();
     }
-
-
-
-    public void PopulateDebugMessengerCreateInfo(ref DebugUtilsMessengerCreateInfoEXT createInfo)
-    {
-        createInfo.SType = StructureType.DebugUtilsMessengerCreateInfoExt;
-        createInfo.MessageSeverity = DebugUtilsMessageSeverityFlagsEXT.VerboseBitExt |
-                                     DebugUtilsMessageSeverityFlagsEXT.WarningBitExt |
-                                     DebugUtilsMessageSeverityFlagsEXT.ErrorBitExt;
-        createInfo.MessageType = DebugUtilsMessageTypeFlagsEXT.GeneralBitExt |
-                                 DebugUtilsMessageTypeFlagsEXT.PerformanceBitExt |
-                                 DebugUtilsMessageTypeFlagsEXT.ValidationBitExt;
-        createInfo.PfnUserCallback = (DebugUtilsMessengerCallbackFunctionEXT)DebugCallback;
-    }
-
-
 
     public void CreateImageViews()
     {
@@ -270,21 +257,7 @@ public unsafe class Game
         }
     }
 
-    public void CreateCommandPool()
-    {
-        var queueFamiliyIndicies = FindQueueFamilies(renderDevice.physicalDevice);
 
-        CommandPoolCreateInfo poolInfo = new()
-        {
-            SType = StructureType.CommandPoolCreateInfo,
-            QueueFamilyIndex = queueFamiliyIndicies.GraphicsFamily!.Value,
-        };
-
-        if (vk!.CreateCommandPool(renderDevice.device, in poolInfo, null, out commandPool) != Result.Success)
-        {
-            throw new Exception("failed to create command pool!");
-        }
-    }
 
     public void CreateDepthResources()
     {
@@ -327,7 +300,7 @@ public unsafe class Game
 
         Buffer stagingBuffer = default;
         DeviceMemory stagingBufferMemory = default;
-        CreateBuffer(imageSize, BufferUsageFlags.TransferSrcBit, MemoryPropertyFlags.HostVisibleBit | MemoryPropertyFlags.HostCoherentBit, ref stagingBuffer, ref stagingBufferMemory);
+        renderBuffer.CreateBuffer(this, imageSize, BufferUsageFlags.TransferSrcBit, MemoryPropertyFlags.HostVisibleBit | MemoryPropertyFlags.HostCoherentBit, ref stagingBuffer, ref stagingBufferMemory);
 
         void* data;
         vk!.MapMemory(renderDevice.device, stagingBufferMemory, 0, imageSize, 0, &data);
@@ -652,124 +625,8 @@ public unsafe class Game
         EndSingleTimeCommands(commandBuffer);
     }
 
-    public void LoadModel()
-    {
-        using var assimp = Assimp.GetApi();
-        var scene = assimp.ImportFile(MODEL_PATH, (uint)PostProcessPreset.TargetRealTimeMaximumQuality);
-
-        var vertexMap = new Dictionary<Vertex, uint>();
-        var vertices = new List<Vertex>();
-        var indices = new List<uint>();
-
-        VisitSceneNode(scene->MRootNode);
-
-        assimp.ReleaseImport(scene);
-
-        this.vertices = vertices.ToArray();
-        this.indices = indices.ToArray();
-
-        void VisitSceneNode(Node* node)
-        {
-            for (int m = 0; m < node->MNumMeshes; m++)
-            {
-                var mesh = scene->MMeshes[node->MMeshes[m]];
-
-                for (int f = 0; f < mesh->MNumFaces; f++)
-                {
-                    var face = mesh->MFaces[f];
-
-                    for (int i = 0; i < face.MNumIndices; i++)
-                    {
-                        uint index = face.MIndices[i];
-
-                        var position = mesh->MVertices[index];
-                        var texture = mesh->MTextureCoords[0][(int)index];
-
-                        Vertex vertex = new()
-                        {
-                            pos = new Vector3D<float>(position.X, position.Y, position.Z),
-                            color = new Vector3D<float>(1, 1, 1),
-                            //Flip Y for OBJ in Vulkan
-                            textCoord = new Vector2D<float>(texture.X, 1.0f - texture.Y)
-                        };
-
-                        if (vertexMap.TryGetValue(vertex, out var meshIndex))
-                        {
-                            indices.Add(meshIndex);
-                        }
-                        else
-                        {
-                            indices.Add((uint)vertices.Count);
-                            vertexMap[vertex] = (uint)vertices.Count;
-                            vertices.Add(vertex);
-                        }
-                    }
-                }
-            }
-
-            for (int c = 0; c < node->MNumChildren; c++)
-            {
-                VisitSceneNode(node->MChildren[c]);
-            }
-        }
-    }
 
 
-    public void CreateVertexBuffer()
-    {
-        ulong bufferSize = (ulong)(Unsafe.SizeOf<Vertex>() * vertices!.Length);
-
-        Buffer stagingBuffer = default;
-        DeviceMemory stagingBufferMemory = default;
-        CreateBuffer(bufferSize, BufferUsageFlags.TransferSrcBit, MemoryPropertyFlags.HostVisibleBit | MemoryPropertyFlags.HostCoherentBit, ref stagingBuffer, ref stagingBufferMemory);
-
-        void* data;
-        vk!.MapMemory(renderDevice.device, stagingBufferMemory, 0, bufferSize, 0, &data);
-        vertices.AsSpan().CopyTo(new Span<Vertex>(data, vertices.Length));
-        vk!.UnmapMemory(renderDevice.device, stagingBufferMemory);
-
-        CreateBuffer(bufferSize, BufferUsageFlags.TransferDstBit | BufferUsageFlags.VertexBufferBit, MemoryPropertyFlags.DeviceLocalBit, ref vertexBuffer, ref vertexBufferMemory);
-
-        CopyBuffer(stagingBuffer, vertexBuffer, bufferSize);
-
-        vk!.DestroyBuffer(renderDevice.device, stagingBuffer, null);
-        vk!.FreeMemory(renderDevice.device, stagingBufferMemory, null);
-    }
-
-    public void CreateIndexBuffer()
-    {
-        ulong bufferSize = (ulong)(Unsafe.SizeOf<uint>() * indices!.Length);
-
-        Buffer stagingBuffer = default;
-        DeviceMemory stagingBufferMemory = default;
-        CreateBuffer(bufferSize, BufferUsageFlags.TransferSrcBit, MemoryPropertyFlags.HostVisibleBit | MemoryPropertyFlags.HostCoherentBit, ref stagingBuffer, ref stagingBufferMemory);
-
-        void* data;
-        vk!.MapMemory(renderDevice.device, stagingBufferMemory, 0, bufferSize, 0, &data);
-        indices.AsSpan().CopyTo(new Span<uint>(data, indices.Length));
-        vk!.UnmapMemory(renderDevice.device, stagingBufferMemory);
-
-        CreateBuffer(bufferSize, BufferUsageFlags.TransferDstBit | BufferUsageFlags.IndexBufferBit, MemoryPropertyFlags.DeviceLocalBit, ref indexBuffer, ref indexBufferMemory);
-
-        CopyBuffer(stagingBuffer, indexBuffer, bufferSize);
-
-        vk!.DestroyBuffer(renderDevice.device, stagingBuffer, null);
-        vk!.FreeMemory(renderDevice.device, stagingBufferMemory, null);
-    }
-
-    public void CreateUniformBuffers()
-    {
-        ulong bufferSize = (ulong)Unsafe.SizeOf<UniformBufferObject>();
-
-        uniformBuffers = new Buffer[renderSwapChain.swapChainImages!.Length];
-        uniformBuffersMemory = new DeviceMemory[renderSwapChain.swapChainImages!.Length];
-
-        for (int i = 0; i < renderSwapChain.swapChainImages.Length; i++)
-        {
-            CreateBuffer(bufferSize, BufferUsageFlags.UniformBufferBit, MemoryPropertyFlags.HostVisibleBit | MemoryPropertyFlags.HostCoherentBit, ref uniformBuffers[i], ref uniformBuffersMemory[i]);
-        }
-
-    }
 
     public void CreateDescriptorPool()
     {
@@ -882,44 +739,7 @@ public unsafe class Game
 
     }
 
-    public void CreateBuffer(ulong size, BufferUsageFlags usage, MemoryPropertyFlags properties, ref Buffer buffer, ref DeviceMemory bufferMemory)
-    {
-        BufferCreateInfo bufferInfo = new()
-        {
-            SType = StructureType.BufferCreateInfo,
-            Size = size,
-            Usage = usage,
-            SharingMode = SharingMode.Exclusive,
-        };
 
-        fixed (Buffer* bufferPtr = &buffer)
-        {
-            if (vk!.CreateBuffer(renderDevice.device, in bufferInfo, null, bufferPtr) != Result.Success)
-            {
-                throw new Exception("failed to create vertex buffer!");
-            }
-        }
-
-        MemoryRequirements memRequirements = new();
-        vk!.GetBufferMemoryRequirements(renderDevice.device, buffer, out memRequirements);
-
-        MemoryAllocateInfo allocateInfo = new()
-        {
-            SType = StructureType.MemoryAllocateInfo,
-            AllocationSize = memRequirements.Size,
-            MemoryTypeIndex = FindMemoryType(memRequirements.MemoryTypeBits, properties),
-        };
-
-        fixed (DeviceMemory* bufferMemoryPtr = &bufferMemory)
-        {
-            if (vk!.AllocateMemory(renderDevice.device, in allocateInfo, null, bufferMemoryPtr) != Result.Success)
-            {
-                throw new Exception("failed to allocate vertex buffer memory!");
-            }
-        }
-
-        vk!.BindBufferMemory(renderDevice.device, buffer, bufferMemory, 0);
-    }
 
     public CommandBuffer BeginSingleTimeCommands()
     {
@@ -927,7 +747,7 @@ public unsafe class Game
         {
             SType = StructureType.CommandBufferAllocateInfo,
             Level = CommandBufferLevel.Primary,
-            CommandPool = commandPool,
+            CommandPool = renderDevice.commandPool,
             CommandBufferCount = 1,
         };
 
@@ -958,22 +778,10 @@ public unsafe class Game
         vk!.QueueSubmit(graphicsQueue, 1, in submitInfo, default);
         vk!.QueueWaitIdle(graphicsQueue);
 
-        vk!.FreeCommandBuffers(renderDevice.device, commandPool, 1, in commandBuffer);
+        vk!.FreeCommandBuffers(renderDevice.device, renderDevice.commandPool, 1, in commandBuffer);
     }
 
-    public void CopyBuffer(Buffer srcBuffer, Buffer dstBuffer, ulong size)
-    {
-        CommandBuffer commandBuffer = BeginSingleTimeCommands();
 
-        BufferCopy copyRegion = new()
-        {
-            Size = size,
-        };
-
-        vk!.CmdCopyBuffer(commandBuffer, srcBuffer, dstBuffer, 1, in copyRegion);
-
-        EndSingleTimeCommands(commandBuffer);
-    }
 
     public uint FindMemoryType(uint typeFilter, MemoryPropertyFlags properties)
     {
@@ -997,7 +805,7 @@ public unsafe class Game
         CommandBufferAllocateInfo allocInfo = new()
         {
             SType = StructureType.CommandBufferAllocateInfo,
-            CommandPool = commandPool,
+            CommandPool = renderDevice.commandPool,
             Level = CommandBufferLevel.Primary,
             CommandBufferCount = (uint)commandBuffers.Length,
         };
@@ -1112,71 +920,5 @@ public unsafe class Game
         }
     }
 
-    public void UpdateUniformBuffer(uint currentImage)
-    {
-        //Silk Window has timing information so we are skipping the time code.
-        var time = (float)window!.Time;
 
-        UniformBufferObject ubo = new()
-        {
-            model = Matrix4X4<float>.Identity * Matrix4X4.CreateFromAxisAngle<float>(new Vector3D<float>(0, 0, 1), time * Scalar.DegreesToRadians(90.0f)),
-            view = Matrix4X4.CreateLookAt(new Vector3D<float>(2, 2, 2), new Vector3D<float>(0, 0, 0), new Vector3D<float>(0, 0, 1)),
-            proj = Matrix4X4.CreatePerspectiveFieldOfView(Scalar.DegreesToRadians(45.0f), (float)renderSwapChain.swapChainExtent.Width / renderSwapChain.swapChainExtent.Height, 0.1f, 10.0f),
-        };
-        ubo.proj.M22 *= -1;
-
-
-        void* data;
-        vk!.MapMemory(renderDevice.device, uniformBuffersMemory![currentImage], 0, (ulong)Unsafe.SizeOf<UniformBufferObject>(), 0, &data);
-        new Span<UniformBufferObject>(data, 1)[0] = ubo;
-        vk!.UnmapMemory(renderDevice.device, uniformBuffersMemory![currentImage]);
-
-    }
-
-    public QueueFamilyIndices FindQueueFamilies(PhysicalDevice device)
-    {
-        var indices = new QueueFamilyIndices();
-
-        uint queueFamilityCount = 0;
-        vk!.GetPhysicalDeviceQueueFamilyProperties(device, ref queueFamilityCount, null);
-
-        var queueFamilies = new QueueFamilyProperties[queueFamilityCount];
-        fixed (QueueFamilyProperties* queueFamiliesPtr = queueFamilies)
-        {
-            vk!.GetPhysicalDeviceQueueFamilyProperties(device, ref queueFamilityCount, queueFamiliesPtr);
-        }
-
-
-        uint i = 0;
-        foreach (var queueFamily in queueFamilies)
-        {
-            if (queueFamily.QueueFlags.HasFlag(QueueFlags.GraphicsBit))
-            {
-                indices.GraphicsFamily = i;
-            }
-
-            graphicsSurface.khrSurface!.GetPhysicalDeviceSurfaceSupport(device, i, graphicsSurface.surface, out var presentSupport);
-
-            if (presentSupport)
-            {
-                indices.PresentFamily = i;
-            }
-
-            if (indices.IsComplete())
-            {
-                break;
-            }
-
-            i++;
-        }
-
-        return indices;
-    }
-
-    public uint DebugCallback(DebugUtilsMessageSeverityFlagsEXT messageSeverity, DebugUtilsMessageTypeFlagsEXT messageTypes, DebugUtilsMessengerCallbackDataEXT* pCallbackData, void* pUserData)
-    {
-        System.Diagnostics.Debug.WriteLine($"validation layer:" + Marshal.PtrToStringAnsi((nint)pCallbackData->PMessage));
-
-        return Vk.False;
-    }
 }
