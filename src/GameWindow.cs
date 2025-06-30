@@ -9,7 +9,8 @@ public unsafe class GameWindow
 
     public IWindow? window;
     public bool frameBufferResized = false;
-    IInputContext? inputContext;
+
+    Input? input;
 
     public void InitWindow()
     {
@@ -27,12 +28,14 @@ public unsafe class GameWindow
         {
             throw new Exception("Windowing platform doesn't support Vulkan.");
         }
+        input = new Input(window!.CreateInput());
 
         window.Resize += FramebufferResizeCallback;
-        inputContext = window.CreateInput();
-        inputContext.Keyboards[0].KeyDown += OnKeyDown;
-        inputContext.Keyboards[0].KeyUp += OnKeyUp;
-        inputContext.Keyboards[0].KeyChar += OnKeyChar;
+        window.Load += OnLoad;
+    }
+
+    private void OnLoad()
+    {
     }
 
     public void Run() => window!.Run();
@@ -40,18 +43,5 @@ public unsafe class GameWindow
     public void FramebufferResizeCallback(Vector2D<int> obj)
     {
         frameBufferResized = true;
-    }
-
-
-    void OnKeyChar(IKeyboard keyboard, char c)
-    {
-    }
-
-    void OnKeyUp(IKeyboard keyboard, Key key, int i)// chuj wie czym jest i
-    {
-    }
-
-    void OnKeyDown(IKeyboard keyboard, Key key, int i)// chuj wie czym jest i
-    {
     }
 }

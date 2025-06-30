@@ -9,10 +9,10 @@ public unsafe class Renderer
 
     public void InitRenderLoop(Game game)
     {
-        game.gameWindow.window!.Render += (delta) => DrawFrame(game, delta);
+        game.gameWindow.window!.Render += (delta) => DrawFrame(game, game.camera, delta);
     }
 
-    void DrawFrame(Game game, double delta)
+    void DrawFrame(Game game, Camera camera, double delta)
     {
         game.vk!.WaitForFences(game.renderDevice.device, 1, in renderSwapChain.inFlightFences![renderSwapChain.currentFrame], true, ulong.MaxValue);
 
@@ -29,7 +29,7 @@ public unsafe class Renderer
             throw new Exception("failed to acquire swap chain image!");
         }
 
-        game.renderBuffer.UpdateUniformBuffer(game, imageIndex);
+        game.renderBuffer.UpdateUniformBuffer(game, camera, imageIndex);
 
         if (renderSwapChain.imagesInFlight![imageIndex].Handle != default)
         {

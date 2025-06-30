@@ -82,7 +82,7 @@ public unsafe class Descriptors
         for (int i = 0; i < game.renderer.renderSwapChain.swapChainImages.Length; i++)
         {
 
-            var cameraBufferInfo = Camera.GetDescriptorBufferInfo(game.graphicsPipeline.uniformBuffers![i]);
+            var cameraBufferInfo = CameraUniform.GetDescriptorBufferInfo(game.graphicsPipeline.uniformBuffers![i]);
 
             DescriptorImageInfo imageInfo = new()
             {
@@ -93,7 +93,7 @@ public unsafe class Descriptors
 
             var descriptorWrites = new WriteDescriptorSet[]
             {
-                Camera.GetWriteDescriptorSet(cameraBufferInfo,descriptorSets[i]),
+                CameraUniform.GetWriteDescriptorSet(cameraBufferInfo,descriptorSets[i]),
                 new()
                 {
                     SType = StructureType.WriteDescriptorSet,

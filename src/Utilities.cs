@@ -1,3 +1,5 @@
+using System.Numerics;
+using Silk.NET.Maths;
 using Silk.NET.Vulkan;
 
 public static class Utilities
@@ -16,4 +18,6 @@ public static class Utilities
 
         throw new Exception("failed to find suitable memory type!");
     }
+
+    public static Vector3D<float> To3D(this Vector3 v) => new(v.X, v.Y, v.Z);
 }

@@ -1,4 +1,6 @@
-﻿using Silk.NET.Maths;
+﻿using System.Numerics;
+using Silk.NET.Input;
+using Silk.NET.Maths;
 using Silk.NET.Vulkan;
 using Silk.NET.Vulkan.Extensions.KHR;
 using Buffer = Silk.NET.Vulkan.Buffer;
@@ -41,15 +43,7 @@ public unsafe class Game
 
     public Model model = new();
 
-    public Camera camera = new(
-        eye: new(0, 1, 2),
-        target: new(0, 0, 0),
-        up: Vector3D<float>.UnitY,
-        aspect: GameWindow.WIDTH / GameWindow.HEIGHT,
-        fovy: 45,
-        znear: 0.1f,
-        zfar: 100.0f
-    );
+    public Camera camera = new();
 
     public void Run()
     {
@@ -97,8 +91,37 @@ public unsafe class Game
     public void MainLoop()
     {
         renderer.InitRenderLoop(this);
+        gameWindow.window!.Update += (delta) => Update(this, delta);
+
         gameWindow.Run();
         vk!.DeviceWaitIdle(renderDevice.device);
+    }
+
+    void Update(Game game, double delta)
+    {
+        var moveSpeed = 2.5f * (float)delta;
+
+        if (Input.Instance.IsKeyPressed(Key.W))
+        {
+            //Move forwards
+            camera.CameraPosition += moveSpeed * camera.CameraFront;
+        }
+        if (Input.Instance.IsKeyPressed(Key.S))
+        {
+            //Move backwards
+            camera.CameraPosition -= moveSpeed * camera.CameraFront;
+        }
+        if (Input.Instance.IsKeyPressed(Key.A))
+        {
+            //Move left
+            var v = Vector3.Normalize(Vector3.Cross(camera.CameraFront, camera.CameraUp)) * moveSpeed;
+            camera.CameraPosition -= Vector3.Normalize(Vector3.Cross(camera.CameraFront, camera.CameraUp)) * moveSpeed;
+        }
+        if (Input.Instance.IsKeyPressed(Key.D))
+        {
+            //Move right
+            camera.CameraPosition += Vector3.Normalize(Vector3.Cross(camera.CameraFront, camera.CameraUp)) * moveSpeed;
+        }
     }
 
     void DestroyBuffers()
