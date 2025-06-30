@@ -25,17 +25,17 @@ public unsafe class Game
 
     const int MAX_FRAMES_IN_FLIGHT = 2;
 
-    bool EnableValidationLayers = true;
+    public bool enableValidationLayers = true;
 
-    public readonly string[] validationLayers = new[]
-    {
+    public readonly string[] validationLayers =
+    [
         "VK_LAYER_KHRONOS_validation"
-    };
+    ];
 
-    public readonly string[] deviceExtensions = new[]
-    {
+    public readonly string[] deviceExtensions =
+    [
         KhrSwapchain.ExtensionName
-    };
+    ];
 
     public IWindow? window;
     public Vk? vk;
@@ -47,20 +47,12 @@ public unsafe class Game
     public KhrSurface? khrSurface;
     public SurfaceKHR surface;
 
-    public PhysicalDevice physicalDevice;
-    public Device device;
+    public RenderDevice renderDevice = new();
+    // public PhysicalDevice physicalDevice;
+    // public Device device;
 
     public Queue graphicsQueue;
     public Queue presentQueue;
-
-    public KhrSwapchain? khrSwapChain;
-    public SwapchainKHR swapChain;
-    public Image[]? swapChainImages;
-    public Format swapChainImageFormat;
-    public Extent2D swapChainExtent;
-    public ImageView[]? swapChainImageViews;
-    public Framebuffer[]? swapChainFramebuffers;
-
 
     public GraphicsPipeline graphicsPipeline = new();
     public RenderSwapChain renderSwapChain = new();
@@ -144,9 +136,9 @@ public unsafe class Game
         CreateInstance();
         SetupDebugMessenger();
         CreateSurface();
-        PickPhysicalDevice();
-        CreateLogicalDevice();
-        CreateSwapChain();
+        renderDevice.PickPhysicalDevice(this);
+        renderDevice.CreateLogicalDevice(this);
+        renderSwapChain.CreateSwapChain(this);
         CreateImageViews();
         graphicsPipeline.CreateRenderPass(this);
         graphicsPipeline.CreateDescriptorSetLayout(this);
@@ -171,39 +163,39 @@ public unsafe class Game
     {
         window!.Render += DrawFrame;
         window!.Run();
-        vk!.DeviceWaitIdle(device);
+        vk!.DeviceWaitIdle(renderDevice.device);
     }
 
     public void CleanUp()
     {
         renderSwapChain.CleanUpSwapChain(this);
 
-        vk!.DestroySampler(device, textureSampler, null);
-        vk!.DestroyImageView(device, textureImageView, null);
+        vk!.DestroySampler(renderDevice.device, textureSampler, null);
+        vk!.DestroyImageView(renderDevice.device, textureImageView, null);
 
-        vk!.DestroyImage(device, textureImage, null);
-        vk!.FreeMemory(device, textureImageMemory, null);
+        vk!.DestroyImage(renderDevice.device, textureImage, null);
+        vk!.FreeMemory(renderDevice.device, textureImageMemory, null);
 
-        vk!.DestroyDescriptorSetLayout(device, graphicsPipeline.descriptorSetLayout, null);
+        vk!.DestroyDescriptorSetLayout(renderDevice.device, graphicsPipeline.descriptorSetLayout, null);
 
-        vk!.DestroyBuffer(device, indexBuffer, null);
-        vk!.FreeMemory(device, indexBufferMemory, null);
+        vk!.DestroyBuffer(renderDevice.device, indexBuffer, null);
+        vk!.FreeMemory(renderDevice.device, indexBufferMemory, null);
 
-        vk!.DestroyBuffer(device, vertexBuffer, null);
-        vk!.FreeMemory(device, vertexBufferMemory, null);
+        vk!.DestroyBuffer(renderDevice.device, vertexBuffer, null);
+        vk!.FreeMemory(renderDevice.device, vertexBufferMemory, null);
 
         for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
         {
-            vk!.DestroySemaphore(device, renderFinishedSemaphores![i], null);
-            vk!.DestroySemaphore(device, imageAvailableSemaphores![i], null);
-            vk!.DestroyFence(device, inFlightFences![i], null);
+            vk!.DestroySemaphore(renderDevice.device, renderFinishedSemaphores![i], null);
+            vk!.DestroySemaphore(renderDevice.device, imageAvailableSemaphores![i], null);
+            vk!.DestroyFence(renderDevice.device, inFlightFences![i], null);
         }
 
-        vk!.DestroyCommandPool(device, commandPool, null);
+        vk!.DestroyCommandPool(renderDevice.device, commandPool, null);
 
-        vk!.DestroyDevice(device, null);
+        vk!.DestroyDevice(renderDevice.device, null);
 
-        if (EnableValidationLayers)
+        if (enableValidationLayers)
         {
             //DestroyDebugUtilsMessenger equivilant to method DestroyDebugUtilsMessengerEXT from original tutorial.
             debugUtils!.DestroyDebugUtilsMessenger(instance, debugMessenger, null);
@@ -220,7 +212,7 @@ public unsafe class Game
     {
         vk = Vk.GetApi();
 
-        if (EnableValidationLayers && !CheckValidationLayerSupport())
+        if (enableValidationLayers && !CheckValidationLayerSupport())
         {
             throw new Exception("validation layers requested, but not available!");
         }
@@ -245,7 +237,7 @@ public unsafe class Game
         createInfo.EnabledExtensionCount = (uint)extensions.Length;
         createInfo.PpEnabledExtensionNames = (byte**)SilkMarshal.StringArrayToPtr(extensions); ;
 
-        if (EnableValidationLayers)
+        if (enableValidationLayers)
         {
             createInfo.EnabledLayerCount = (uint)validationLayers.Length;
             createInfo.PpEnabledLayerNames = (byte**)SilkMarshal.StringArrayToPtr(validationLayers);
@@ -269,7 +261,7 @@ public unsafe class Game
         Marshal.FreeHGlobal((IntPtr)appInfo.PEngineName);
         SilkMarshal.Free((nint)createInfo.PpEnabledExtensionNames);
 
-        if (EnableValidationLayers)
+        if (enableValidationLayers)
         {
             SilkMarshal.Free((nint)createInfo.PpEnabledLayerNames);
         }
@@ -289,7 +281,7 @@ public unsafe class Game
 
     public void SetupDebugMessenger()
     {
-        if (!EnableValidationLayers) return;
+        if (!enableValidationLayers) return;
 
         //TryGetInstanceExtension equivilant to method CreateDebugUtilsMessengerEXT from original tutorial.
         if (!vk!.TryGetInstanceExtension(instance, out debugUtils)) return;
@@ -313,186 +305,24 @@ public unsafe class Game
         surface = window!.VkSurface!.Create<AllocationCallbacks>(instance.ToHandle(), null).ToSurface();
     }
 
-    public void PickPhysicalDevice()
-    {
-        var devices = vk!.GetPhysicalDevices(instance);
-
-        foreach (var device in devices)
-        {
-            if (IsDeviceSuitable(device))
-            {
-                physicalDevice = device;
-                break;
-            }
-        }
-
-        if (physicalDevice.Handle == 0)
-        {
-            throw new Exception("failed to find a suitable GPU!");
-        }
-    }
-
-    public void CreateLogicalDevice()
-    {
-        var indices = FindQueueFamilies(physicalDevice);
-
-        var uniqueQueueFamilies = new[] { indices.GraphicsFamily!.Value, indices.PresentFamily!.Value };
-        uniqueQueueFamilies = uniqueQueueFamilies.Distinct().ToArray();
-
-        using var mem = GlobalMemory.Allocate(uniqueQueueFamilies.Length * sizeof(DeviceQueueCreateInfo));
-        var queueCreateInfos = (DeviceQueueCreateInfo*)Unsafe.AsPointer(ref mem.GetPinnableReference());
-
-        float queuePriority = 1.0f;
-        for (int i = 0; i < uniqueQueueFamilies.Length; i++)
-        {
-            queueCreateInfos[i] = new()
-            {
-                SType = StructureType.DeviceQueueCreateInfo,
-                QueueFamilyIndex = uniqueQueueFamilies[i],
-                QueueCount = 1,
-                PQueuePriorities = &queuePriority
-            };
-        }
-
-        PhysicalDeviceFeatures deviceFeatures = new()
-        {
-            SamplerAnisotropy = true,
-        };
-
-
-        DeviceCreateInfo createInfo = new()
-        {
-            SType = StructureType.DeviceCreateInfo,
-            QueueCreateInfoCount = (uint)uniqueQueueFamilies.Length,
-            PQueueCreateInfos = queueCreateInfos,
-
-            PEnabledFeatures = &deviceFeatures,
-
-            EnabledExtensionCount = (uint)deviceExtensions.Length,
-            PpEnabledExtensionNames = (byte**)SilkMarshal.StringArrayToPtr(deviceExtensions)
-        };
-
-        if (EnableValidationLayers)
-        {
-            createInfo.EnabledLayerCount = (uint)validationLayers.Length;
-            createInfo.PpEnabledLayerNames = (byte**)SilkMarshal.StringArrayToPtr(validationLayers);
-        }
-        else
-        {
-            createInfo.EnabledLayerCount = 0;
-        }
-
-        if (vk!.CreateDevice(physicalDevice, in createInfo, null, out device) != Result.Success)
-        {
-            throw new Exception("failed to create logical device!");
-        }
-
-        vk!.GetDeviceQueue(device, indices.GraphicsFamily!.Value, 0, out graphicsQueue);
-        vk!.GetDeviceQueue(device, indices.PresentFamily!.Value, 0, out presentQueue);
-
-        if (EnableValidationLayers)
-        {
-            SilkMarshal.Free((nint)createInfo.PpEnabledLayerNames);
-        }
-
-        SilkMarshal.Free((nint)createInfo.PpEnabledExtensionNames);
-
-    }
-
-    public void CreateSwapChain()
-    {
-        var swapChainSupport = QuerySwapChainSupport(physicalDevice);
-
-        var surfaceFormat = ChooseSwapSurfaceFormat(swapChainSupport.Formats);
-        var presentMode = ChoosePresentMode(swapChainSupport.PresentModes);
-        var extent = ChooseSwapExtent(swapChainSupport.Capabilities);
-
-        var imageCount = swapChainSupport.Capabilities.MinImageCount + 1;
-        if (swapChainSupport.Capabilities.MaxImageCount > 0 && imageCount > swapChainSupport.Capabilities.MaxImageCount)
-        {
-            imageCount = swapChainSupport.Capabilities.MaxImageCount;
-        }
-
-        SwapchainCreateInfoKHR creatInfo = new()
-        {
-            SType = StructureType.SwapchainCreateInfoKhr,
-            Surface = surface,
-
-            MinImageCount = imageCount,
-            ImageFormat = surfaceFormat.Format,
-            ImageColorSpace = surfaceFormat.ColorSpace,
-            ImageExtent = extent,
-            ImageArrayLayers = 1,
-            ImageUsage = ImageUsageFlags.ColorAttachmentBit,
-        };
-
-        var indices = FindQueueFamilies(physicalDevice);
-        var queueFamilyIndices = stackalloc[] { indices.GraphicsFamily!.Value, indices.PresentFamily!.Value };
-
-        if (indices.GraphicsFamily != indices.PresentFamily)
-        {
-            creatInfo = creatInfo with
-            {
-                ImageSharingMode = SharingMode.Concurrent,
-                QueueFamilyIndexCount = 2,
-                PQueueFamilyIndices = queueFamilyIndices,
-            };
-        }
-        else
-        {
-            creatInfo.ImageSharingMode = SharingMode.Exclusive;
-        }
-
-        creatInfo = creatInfo with
-        {
-            PreTransform = swapChainSupport.Capabilities.CurrentTransform,
-            CompositeAlpha = CompositeAlphaFlagsKHR.OpaqueBitKhr,
-            PresentMode = presentMode,
-            Clipped = true,
-        };
-
-        if (khrSwapChain is null)
-        {
-            if (!vk!.TryGetDeviceExtension(instance, device, out khrSwapChain))
-            {
-                throw new NotSupportedException("VK_KHR_swapchain extension not found.");
-            }
-        }
-
-        if (khrSwapChain!.CreateSwapchain(device, in creatInfo, null, out swapChain) != Result.Success)
-        {
-            throw new Exception("failed to create swap chain!");
-        }
-
-        khrSwapChain.GetSwapchainImages(device, swapChain, ref imageCount, null);
-        swapChainImages = new Image[imageCount];
-        fixed (Image* swapChainImagesPtr = swapChainImages)
-        {
-            khrSwapChain.GetSwapchainImages(device, swapChain, ref imageCount, swapChainImagesPtr);
-        }
-
-        swapChainImageFormat = surfaceFormat.Format;
-        swapChainExtent = extent;
-    }
-
     public void CreateImageViews()
     {
-        swapChainImageViews = new ImageView[swapChainImages!.Length];
+        renderSwapChain.swapChainImageViews = new ImageView[renderSwapChain.swapChainImages!.Length];
 
-        for (int i = 0; i < swapChainImages.Length; i++)
+        for (int i = 0; i < renderSwapChain.swapChainImages.Length; i++)
         {
 
-            swapChainImageViews[i] = CreateImageView(swapChainImages[i], swapChainImageFormat, ImageAspectFlags.ColorBit, 1);
+            renderSwapChain.swapChainImageViews[i] = CreateImageView(renderSwapChain.swapChainImages[i], renderSwapChain.swapChainImageFormat, ImageAspectFlags.ColorBit, 1);
         }
     }
 
     public void CreateFramebuffers()
     {
-        swapChainFramebuffers = new Framebuffer[swapChainImageViews!.Length];
+        renderSwapChain.swapChainFramebuffers = new Framebuffer[renderSwapChain.swapChainImageViews!.Length];
 
-        for (int i = 0; i < swapChainImageViews.Length; i++)
+        for (int i = 0; i < renderSwapChain.swapChainImageViews.Length; i++)
         {
-            var attachments = new[] { swapChainImageViews[i], depthImageView };
+            var attachments = new[] { renderSwapChain.swapChainImageViews[i], depthImageView };
 
             fixed (ImageView* attachmentsPtr = attachments)
             {
@@ -502,12 +332,12 @@ public unsafe class Game
                     RenderPass = graphicsPipeline.renderPass,
                     AttachmentCount = (uint)attachments.Length,
                     PAttachments = attachmentsPtr,
-                    Width = swapChainExtent.Width,
-                    Height = swapChainExtent.Height,
+                    Width = renderSwapChain.swapChainExtent.Width,
+                    Height = renderSwapChain.swapChainExtent.Height,
                     Layers = 1,
                 };
 
-                if (vk!.CreateFramebuffer(device, in framebufferInfo, null, out swapChainFramebuffers[i]) != Result.Success)
+                if (vk!.CreateFramebuffer(renderDevice.device, in framebufferInfo, null, out renderSwapChain.swapChainFramebuffers[i]) != Result.Success)
                 {
                     throw new Exception("failed to create framebuffer!");
                 }
@@ -517,7 +347,7 @@ public unsafe class Game
 
     public void CreateCommandPool()
     {
-        var queueFamiliyIndicies = FindQueueFamilies(physicalDevice);
+        var queueFamiliyIndicies = FindQueueFamilies(renderDevice.physicalDevice);
 
         CommandPoolCreateInfo poolInfo = new()
         {
@@ -525,7 +355,7 @@ public unsafe class Game
             QueueFamilyIndex = queueFamiliyIndicies.GraphicsFamily!.Value,
         };
 
-        if (vk!.CreateCommandPool(device, in poolInfo, null, out commandPool) != Result.Success)
+        if (vk!.CreateCommandPool(renderDevice.device, in poolInfo, null, out commandPool) != Result.Success)
         {
             throw new Exception("failed to create command pool!");
         }
@@ -535,7 +365,7 @@ public unsafe class Game
     {
         Format depthFormat = FindDepthFormat();
 
-        CreateImage(swapChainExtent.Width, swapChainExtent.Height, 1, depthFormat, ImageTiling.Optimal, ImageUsageFlags.DepthStencilAttachmentBit, MemoryPropertyFlags.DeviceLocalBit, ref depthImage, ref depthImageMemory);
+        CreateImage(renderSwapChain.swapChainExtent.Width, renderSwapChain.swapChainExtent.Height, 1, depthFormat, ImageTiling.Optimal, ImageUsageFlags.DepthStencilAttachmentBit, MemoryPropertyFlags.DeviceLocalBit, ref depthImage, ref depthImageMemory);
         depthImageView = CreateImageView(depthImage, depthFormat, ImageAspectFlags.DepthBit, 1);
     }
 
@@ -543,7 +373,7 @@ public unsafe class Game
     {
         foreach (var format in candidates)
         {
-            vk!.GetPhysicalDeviceFormatProperties(physicalDevice, format, out var props);
+            vk!.GetPhysicalDeviceFormatProperties(renderDevice.physicalDevice, format, out var props);
 
             if (tiling == ImageTiling.Linear && (props.LinearTilingFeatures & features) == features)
             {
@@ -575,9 +405,9 @@ public unsafe class Game
         CreateBuffer(imageSize, BufferUsageFlags.TransferSrcBit, MemoryPropertyFlags.HostVisibleBit | MemoryPropertyFlags.HostCoherentBit, ref stagingBuffer, ref stagingBufferMemory);
 
         void* data;
-        vk!.MapMemory(device, stagingBufferMemory, 0, imageSize, 0, &data);
+        vk!.MapMemory(renderDevice.device, stagingBufferMemory, 0, imageSize, 0, &data);
         img.CopyPixelDataTo(new Span<byte>(data, (int)imageSize));
-        vk!.UnmapMemory(device, stagingBufferMemory);
+        vk!.UnmapMemory(renderDevice.device, stagingBufferMemory);
 
         CreateImage((uint)img.Width, (uint)img.Height, mipLevels, Format.R8G8B8A8Srgb, ImageTiling.Optimal, ImageUsageFlags.TransferSrcBit | ImageUsageFlags.TransferDstBit | ImageUsageFlags.SampledBit, MemoryPropertyFlags.DeviceLocalBit, ref textureImage, ref textureImageMemory);
 
@@ -585,15 +415,15 @@ public unsafe class Game
         CopyBufferToImage(stagingBuffer, textureImage, (uint)img.Width, (uint)img.Height);
         //Transitioned to VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL while generating mipmaps
 
-        vk!.DestroyBuffer(device, stagingBuffer, null);
-        vk!.FreeMemory(device, stagingBufferMemory, null);
+        vk!.DestroyBuffer(renderDevice.device, stagingBuffer, null);
+        vk!.FreeMemory(renderDevice.device, stagingBufferMemory, null);
 
         GenerateMipMaps(textureImage, Format.R8G8B8A8Srgb, (uint)img.Width, (uint)img.Height, mipLevels);
     }
 
     public void GenerateMipMaps(Image image, Format imageFormat, uint width, uint height, uint mipLevels)
     {
-        vk!.GetPhysicalDeviceFormatProperties(physicalDevice, imageFormat, out var formatProperties);
+        vk!.GetPhysicalDeviceFormatProperties(renderDevice.physicalDevice, imageFormat, out var formatProperties);
 
         if ((formatProperties.OptimalTilingFeatures & FormatFeatureFlags.SampledImageFilterLinearBit) == 0)
         {
@@ -703,7 +533,7 @@ public unsafe class Game
 
     public void CreateTextureSampler()
     {
-        vk!.GetPhysicalDeviceProperties(physicalDevice, out PhysicalDeviceProperties properties);
+        vk!.GetPhysicalDeviceProperties(renderDevice.physicalDevice, out PhysicalDeviceProperties properties);
 
         SamplerCreateInfo samplerInfo = new()
         {
@@ -727,7 +557,7 @@ public unsafe class Game
 
         fixed (Sampler* textureSamplerPtr = &textureSampler)
         {
-            if (vk!.CreateSampler(device, in samplerInfo, null, textureSamplerPtr) != Result.Success)
+            if (vk!.CreateSampler(renderDevice.device, in samplerInfo, null, textureSamplerPtr) != Result.Success)
             {
                 throw new Exception("failed to create texture sampler!");
             }
@@ -761,7 +591,7 @@ public unsafe class Game
         };
 
 
-        if (vk!.CreateImageView(device, in createInfo, null, out ImageView imageView) != Result.Success)
+        if (vk!.CreateImageView(renderDevice.device, in createInfo, null, out ImageView imageView) != Result.Success)
         {
             throw new Exception("failed to create image views!");
         }
@@ -793,13 +623,13 @@ public unsafe class Game
 
         fixed (Image* imagePtr = &image)
         {
-            if (vk!.CreateImage(device, in imageInfo, null, imagePtr) != Result.Success)
+            if (vk!.CreateImage(renderDevice.device, in imageInfo, null, imagePtr) != Result.Success)
             {
                 throw new Exception("failed to create image!");
             }
         }
 
-        vk!.GetImageMemoryRequirements(device, image, out MemoryRequirements memRequirements);
+        vk!.GetImageMemoryRequirements(renderDevice.device, image, out MemoryRequirements memRequirements);
 
         MemoryAllocateInfo allocInfo = new()
         {
@@ -810,13 +640,13 @@ public unsafe class Game
 
         fixed (DeviceMemory* imageMemoryPtr = &imageMemory)
         {
-            if (vk!.AllocateMemory(device, in allocInfo, null, imageMemoryPtr) != Result.Success)
+            if (vk!.AllocateMemory(renderDevice.device, in allocInfo, null, imageMemoryPtr) != Result.Success)
             {
                 throw new Exception("failed to allocate image memory!");
             }
         }
 
-        vk!.BindImageMemory(device, image, imageMemory, 0);
+        vk!.BindImageMemory(renderDevice.device, image, imageMemory, 0);
     }
 
     public void TransitionImageLayout(Image image, Format format, ImageLayout oldLayout, ImageLayout newLayout, uint mipLevels)
@@ -969,16 +799,16 @@ public unsafe class Game
         CreateBuffer(bufferSize, BufferUsageFlags.TransferSrcBit, MemoryPropertyFlags.HostVisibleBit | MemoryPropertyFlags.HostCoherentBit, ref stagingBuffer, ref stagingBufferMemory);
 
         void* data;
-        vk!.MapMemory(device, stagingBufferMemory, 0, bufferSize, 0, &data);
+        vk!.MapMemory(renderDevice.device, stagingBufferMemory, 0, bufferSize, 0, &data);
         vertices.AsSpan().CopyTo(new Span<Vertex>(data, vertices.Length));
-        vk!.UnmapMemory(device, stagingBufferMemory);
+        vk!.UnmapMemory(renderDevice.device, stagingBufferMemory);
 
         CreateBuffer(bufferSize, BufferUsageFlags.TransferDstBit | BufferUsageFlags.VertexBufferBit, MemoryPropertyFlags.DeviceLocalBit, ref vertexBuffer, ref vertexBufferMemory);
 
         CopyBuffer(stagingBuffer, vertexBuffer, bufferSize);
 
-        vk!.DestroyBuffer(device, stagingBuffer, null);
-        vk!.FreeMemory(device, stagingBufferMemory, null);
+        vk!.DestroyBuffer(renderDevice.device, stagingBuffer, null);
+        vk!.FreeMemory(renderDevice.device, stagingBufferMemory, null);
     }
 
     public void CreateIndexBuffer()
@@ -990,26 +820,26 @@ public unsafe class Game
         CreateBuffer(bufferSize, BufferUsageFlags.TransferSrcBit, MemoryPropertyFlags.HostVisibleBit | MemoryPropertyFlags.HostCoherentBit, ref stagingBuffer, ref stagingBufferMemory);
 
         void* data;
-        vk!.MapMemory(device, stagingBufferMemory, 0, bufferSize, 0, &data);
+        vk!.MapMemory(renderDevice.device, stagingBufferMemory, 0, bufferSize, 0, &data);
         indices.AsSpan().CopyTo(new Span<uint>(data, indices.Length));
-        vk!.UnmapMemory(device, stagingBufferMemory);
+        vk!.UnmapMemory(renderDevice.device, stagingBufferMemory);
 
         CreateBuffer(bufferSize, BufferUsageFlags.TransferDstBit | BufferUsageFlags.IndexBufferBit, MemoryPropertyFlags.DeviceLocalBit, ref indexBuffer, ref indexBufferMemory);
 
         CopyBuffer(stagingBuffer, indexBuffer, bufferSize);
 
-        vk!.DestroyBuffer(device, stagingBuffer, null);
-        vk!.FreeMemory(device, stagingBufferMemory, null);
+        vk!.DestroyBuffer(renderDevice.device, stagingBuffer, null);
+        vk!.FreeMemory(renderDevice.device, stagingBufferMemory, null);
     }
 
     public void CreateUniformBuffers()
     {
         ulong bufferSize = (ulong)Unsafe.SizeOf<UniformBufferObject>();
 
-        uniformBuffers = new Buffer[swapChainImages!.Length];
-        uniformBuffersMemory = new DeviceMemory[swapChainImages!.Length];
+        uniformBuffers = new Buffer[renderSwapChain.swapChainImages!.Length];
+        uniformBuffersMemory = new DeviceMemory[renderSwapChain.swapChainImages!.Length];
 
-        for (int i = 0; i < swapChainImages.Length; i++)
+        for (int i = 0; i < renderSwapChain.swapChainImages.Length; i++)
         {
             CreateBuffer(bufferSize, BufferUsageFlags.UniformBufferBit, MemoryPropertyFlags.HostVisibleBit | MemoryPropertyFlags.HostCoherentBit, ref uniformBuffers[i], ref uniformBuffersMemory[i]);
         }
@@ -1023,12 +853,12 @@ public unsafe class Game
             new DescriptorPoolSize()
             {
                 Type = DescriptorType.UniformBuffer,
-                DescriptorCount = (uint)swapChainImages!.Length,
+                DescriptorCount = (uint)renderSwapChain.swapChainImages!.Length,
             },
             new DescriptorPoolSize()
             {
                 Type = DescriptorType.CombinedImageSampler,
-                DescriptorCount = (uint)swapChainImages!.Length,
+                DescriptorCount = (uint)renderSwapChain.swapChainImages!.Length,
             }
         };
 
@@ -1041,10 +871,10 @@ public unsafe class Game
                 SType = StructureType.DescriptorPoolCreateInfo,
                 PoolSizeCount = (uint)poolSizes.Length,
                 PPoolSizes = poolSizesPtr,
-                MaxSets = (uint)swapChainImages!.Length,
+                MaxSets = (uint)renderSwapChain.swapChainImages!.Length,
             };
 
-            if (vk!.CreateDescriptorPool(device, in poolInfo, null, descriptorPoolPtr) != Result.Success)
+            if (vk!.CreateDescriptorPool(renderDevice.device, in poolInfo, null, descriptorPoolPtr) != Result.Success)
             {
                 throw new Exception("failed to create descriptor pool!");
             }
@@ -1054,7 +884,7 @@ public unsafe class Game
 
     public void CreateDescriptorSets()
     {
-        var layouts = new DescriptorSetLayout[swapChainImages!.Length];
+        var layouts = new DescriptorSetLayout[renderSwapChain.swapChainImages!.Length];
         Array.Fill(layouts, graphicsPipeline.descriptorSetLayout);
 
         fixed (DescriptorSetLayout* layoutsPtr = layouts)
@@ -1063,14 +893,14 @@ public unsafe class Game
             {
                 SType = StructureType.DescriptorSetAllocateInfo,
                 DescriptorPool = descriptorPool,
-                DescriptorSetCount = (uint)swapChainImages!.Length,
+                DescriptorSetCount = (uint)renderSwapChain.swapChainImages!.Length,
                 PSetLayouts = layoutsPtr,
             };
 
-            descriptorSets = new DescriptorSet[swapChainImages.Length];
+            descriptorSets = new DescriptorSet[renderSwapChain.swapChainImages.Length];
             fixed (DescriptorSet* descriptorSetsPtr = descriptorSets)
             {
-                if (vk!.AllocateDescriptorSets(device, in allocateInfo, descriptorSetsPtr) != Result.Success)
+                if (vk!.AllocateDescriptorSets(renderDevice.device, in allocateInfo, descriptorSetsPtr) != Result.Success)
                 {
                     throw new Exception("failed to allocate descriptor sets!");
                 }
@@ -1078,7 +908,7 @@ public unsafe class Game
         }
 
 
-        for (int i = 0; i < swapChainImages.Length; i++)
+        for (int i = 0; i < renderSwapChain.swapChainImages.Length; i++)
         {
             DescriptorBufferInfo bufferInfo = new()
             {
@@ -1121,7 +951,7 @@ public unsafe class Game
 
             fixed (WriteDescriptorSet* descriptorWritesPtr = descriptorWrites)
             {
-                vk!.UpdateDescriptorSets(device, (uint)descriptorWrites.Length, descriptorWritesPtr, 0, null);
+                vk!.UpdateDescriptorSets(renderDevice.device, (uint)descriptorWrites.Length, descriptorWritesPtr, 0, null);
             }
         }
 
@@ -1139,14 +969,14 @@ public unsafe class Game
 
         fixed (Buffer* bufferPtr = &buffer)
         {
-            if (vk!.CreateBuffer(device, in bufferInfo, null, bufferPtr) != Result.Success)
+            if (vk!.CreateBuffer(renderDevice.device, in bufferInfo, null, bufferPtr) != Result.Success)
             {
                 throw new Exception("failed to create vertex buffer!");
             }
         }
 
         MemoryRequirements memRequirements = new();
-        vk!.GetBufferMemoryRequirements(device, buffer, out memRequirements);
+        vk!.GetBufferMemoryRequirements(renderDevice.device, buffer, out memRequirements);
 
         MemoryAllocateInfo allocateInfo = new()
         {
@@ -1157,13 +987,13 @@ public unsafe class Game
 
         fixed (DeviceMemory* bufferMemoryPtr = &bufferMemory)
         {
-            if (vk!.AllocateMemory(device, in allocateInfo, null, bufferMemoryPtr) != Result.Success)
+            if (vk!.AllocateMemory(renderDevice.device, in allocateInfo, null, bufferMemoryPtr) != Result.Success)
             {
                 throw new Exception("failed to allocate vertex buffer memory!");
             }
         }
 
-        vk!.BindBufferMemory(device, buffer, bufferMemory, 0);
+        vk!.BindBufferMemory(renderDevice.device, buffer, bufferMemory, 0);
     }
 
     public CommandBuffer BeginSingleTimeCommands()
@@ -1176,7 +1006,7 @@ public unsafe class Game
             CommandBufferCount = 1,
         };
 
-        vk!.AllocateCommandBuffers(device, in allocateInfo, out CommandBuffer commandBuffer);
+        vk!.AllocateCommandBuffers(renderDevice.device, in allocateInfo, out CommandBuffer commandBuffer);
 
         CommandBufferBeginInfo beginInfo = new()
         {
@@ -1203,7 +1033,7 @@ public unsafe class Game
         vk!.QueueSubmit(graphicsQueue, 1, in submitInfo, default);
         vk!.QueueWaitIdle(graphicsQueue);
 
-        vk!.FreeCommandBuffers(device, commandPool, 1, in commandBuffer);
+        vk!.FreeCommandBuffers(renderDevice.device, commandPool, 1, in commandBuffer);
     }
 
     public void CopyBuffer(Buffer srcBuffer, Buffer dstBuffer, ulong size)
@@ -1222,7 +1052,7 @@ public unsafe class Game
 
     public uint FindMemoryType(uint typeFilter, MemoryPropertyFlags properties)
     {
-        vk!.GetPhysicalDeviceMemoryProperties(physicalDevice, out PhysicalDeviceMemoryProperties memProperties);
+        vk!.GetPhysicalDeviceMemoryProperties(renderDevice.physicalDevice, out PhysicalDeviceMemoryProperties memProperties);
 
         for (int i = 0; i < memProperties.MemoryTypeCount; i++)
         {
@@ -1237,7 +1067,7 @@ public unsafe class Game
 
     public void CreateCommandBuffers()
     {
-        commandBuffers = new CommandBuffer[swapChainFramebuffers!.Length];
+        commandBuffers = new CommandBuffer[renderSwapChain.swapChainFramebuffers!.Length];
 
         CommandBufferAllocateInfo allocInfo = new()
         {
@@ -1249,7 +1079,7 @@ public unsafe class Game
 
         fixed (CommandBuffer* commandBuffersPtr = commandBuffers)
         {
-            if (vk!.AllocateCommandBuffers(device, in allocInfo, commandBuffersPtr) != Result.Success)
+            if (vk!.AllocateCommandBuffers(renderDevice.device, in allocInfo, commandBuffersPtr) != Result.Success)
             {
                 throw new Exception("failed to allocate command buffers!");
             }
@@ -1272,11 +1102,11 @@ public unsafe class Game
             {
                 SType = StructureType.RenderPassBeginInfo,
                 RenderPass = graphicsPipeline.renderPass,
-                Framebuffer = swapChainFramebuffers[i],
+                Framebuffer = renderSwapChain.swapChainFramebuffers[i],
                 RenderArea =
                 {
                     Offset = { X = 0, Y = 0 },
-                    Extent = swapChainExtent,
+                    Extent = renderSwapChain.swapChainExtent,
                 }
             };
 
@@ -1333,7 +1163,7 @@ public unsafe class Game
         imageAvailableSemaphores = new Semaphore[MAX_FRAMES_IN_FLIGHT];
         renderFinishedSemaphores = new Semaphore[MAX_FRAMES_IN_FLIGHT];
         inFlightFences = new Fence[MAX_FRAMES_IN_FLIGHT];
-        imagesInFlight = new Fence[swapChainImages!.Length];
+        imagesInFlight = new Fence[renderSwapChain.swapChainImages!.Length];
 
         SemaphoreCreateInfo semaphoreInfo = new()
         {
@@ -1348,9 +1178,9 @@ public unsafe class Game
 
         for (var i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
         {
-            if (vk!.CreateSemaphore(device, in semaphoreInfo, null, out imageAvailableSemaphores[i]) != Result.Success ||
-                vk!.CreateSemaphore(device, in semaphoreInfo, null, out renderFinishedSemaphores[i]) != Result.Success ||
-                vk!.CreateFence(device, in fenceInfo, null, out inFlightFences[i]) != Result.Success)
+            if (vk!.CreateSemaphore(renderDevice.device, in semaphoreInfo, null, out imageAvailableSemaphores[i]) != Result.Success ||
+                vk!.CreateSemaphore(renderDevice.device, in semaphoreInfo, null, out renderFinishedSemaphores[i]) != Result.Success ||
+                vk!.CreateFence(renderDevice.device, in fenceInfo, null, out inFlightFences[i]) != Result.Success)
             {
                 throw new Exception("failed to create synchronization objects for a frame!");
             }
@@ -1366,24 +1196,24 @@ public unsafe class Game
         {
             model = Matrix4X4<float>.Identity * Matrix4X4.CreateFromAxisAngle<float>(new Vector3D<float>(0, 0, 1), time * Scalar.DegreesToRadians(90.0f)),
             view = Matrix4X4.CreateLookAt(new Vector3D<float>(2, 2, 2), new Vector3D<float>(0, 0, 0), new Vector3D<float>(0, 0, 1)),
-            proj = Matrix4X4.CreatePerspectiveFieldOfView(Scalar.DegreesToRadians(45.0f), (float)swapChainExtent.Width / swapChainExtent.Height, 0.1f, 10.0f),
+            proj = Matrix4X4.CreatePerspectiveFieldOfView(Scalar.DegreesToRadians(45.0f), (float)renderSwapChain.swapChainExtent.Width / renderSwapChain.swapChainExtent.Height, 0.1f, 10.0f),
         };
         ubo.proj.M22 *= -1;
 
 
         void* data;
-        vk!.MapMemory(device, uniformBuffersMemory![currentImage], 0, (ulong)Unsafe.SizeOf<UniformBufferObject>(), 0, &data);
+        vk!.MapMemory(renderDevice.device, uniformBuffersMemory![currentImage], 0, (ulong)Unsafe.SizeOf<UniformBufferObject>(), 0, &data);
         new Span<UniformBufferObject>(data, 1)[0] = ubo;
-        vk!.UnmapMemory(device, uniformBuffersMemory![currentImage]);
+        vk!.UnmapMemory(renderDevice.device, uniformBuffersMemory![currentImage]);
 
     }
 
     public void DrawFrame(double delta)
     {
-        vk!.WaitForFences(device, 1, in inFlightFences![currentFrame], true, ulong.MaxValue);
+        vk!.WaitForFences(renderDevice.device, 1, in inFlightFences![currentFrame], true, ulong.MaxValue);
 
         uint imageIndex = 0;
-        var result = khrSwapChain!.AcquireNextImage(device, swapChain, ulong.MaxValue, imageAvailableSemaphores![currentFrame], default, ref imageIndex);
+        var result = renderSwapChain.khrSwapChain!.AcquireNextImage(renderDevice.device, renderSwapChain.swapChain, ulong.MaxValue, imageAvailableSemaphores![currentFrame], default, ref imageIndex);
 
         if (result == Result.ErrorOutOfDateKhr)
         {
@@ -1399,7 +1229,7 @@ public unsafe class Game
 
         if (imagesInFlight![imageIndex].Handle != default)
         {
-            vk!.WaitForFences(device, 1, in imagesInFlight[imageIndex], true, ulong.MaxValue);
+            vk!.WaitForFences(renderDevice.device, 1, in imagesInFlight[imageIndex], true, ulong.MaxValue);
         }
         imagesInFlight[imageIndex] = inFlightFences[currentFrame];
 
@@ -1430,14 +1260,14 @@ public unsafe class Game
             PSignalSemaphores = signalSemaphores,
         };
 
-        vk!.ResetFences(device, 1, in inFlightFences[currentFrame]);
+        vk!.ResetFences(renderDevice.device, 1, in inFlightFences[currentFrame]);
 
         if (vk!.QueueSubmit(graphicsQueue, 1, in submitInfo, inFlightFences[currentFrame]) != Result.Success)
         {
             throw new Exception("failed to submit draw command buffer!");
         }
 
-        var swapChains = stackalloc[] { swapChain };
+        var swapChains = stackalloc[] { renderSwapChain.swapChain };
         PresentInfoKHR presentInfo = new()
         {
             SType = StructureType.PresentInfoKhr,
@@ -1451,7 +1281,7 @@ public unsafe class Game
             PImageIndices = &imageIndex
         };
 
-        result = khrSwapChain.QueuePresent(presentQueue, in presentInfo);
+        result = renderSwapChain.khrSwapChain.QueuePresent(presentQueue, in presentInfo);
 
         if (result == Result.ErrorOutOfDateKhr || result == Result.SuboptimalKhr || frameBufferResized)
         {
@@ -1481,7 +1311,7 @@ public unsafe class Game
         {
             createInfo.PCode = (uint*)codePtr;
 
-            if (vk!.CreateShaderModule(device, in createInfo, null, out shaderModule) != Result.Success)
+            if (vk!.CreateShaderModule(renderDevice.device, in createInfo, null, out shaderModule) != Result.Success)
             {
                 throw new Exception();
             }
@@ -1662,7 +1492,7 @@ public unsafe class Game
         var glfwExtensions = window!.VkSurface!.GetRequiredExtensions(out var glfwExtensionCount);
         var extensions = SilkMarshal.PtrToStringArray((nint)glfwExtensions, (int)glfwExtensionCount);
 
-        if (EnableValidationLayers)
+        if (enableValidationLayers)
         {
             return extensions.Append(ExtDebugUtils.ExtensionName).ToArray();
         }

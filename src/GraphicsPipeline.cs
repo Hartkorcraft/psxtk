@@ -21,9 +21,9 @@ public unsafe class GraphicsPipeline
 
     public void CleanUp(Game game)
     {
-        game.vk!.DestroyPipeline(game.device, graphicsPipeline, null);
-        game.vk!.DestroyPipelineLayout(game.device, pipelineLayout, null);
-        game.vk!.DestroyRenderPass(game.device, renderPass, null);
+        game.vk!.DestroyPipeline(game.renderDevice.device, graphicsPipeline, null);
+        game.vk!.DestroyPipelineLayout(game.renderDevice.device, pipelineLayout, null);
+        game.vk!.DestroyRenderPass(game.renderDevice.device, renderPass, null);
     }
 
     public void CreateGraphicsPipeline(Game game)
@@ -83,8 +83,8 @@ public unsafe class GraphicsPipeline
             {
                 X = 0,
                 Y = 0,
-                Width = game.swapChainExtent.Width,
-                Height = game.swapChainExtent.Height,
+                Width = game.renderSwapChain.swapChainExtent.Width,
+                Height = game.renderSwapChain.swapChainExtent.Height,
                 MinDepth = 0,
                 MaxDepth = 1,
             };
@@ -92,7 +92,7 @@ public unsafe class GraphicsPipeline
             Rect2D scissor = new()
             {
                 Offset = { X = 0, Y = 0 },
-                Extent = game.swapChainExtent,
+                Extent = game.renderSwapChain.swapChainExtent,
             };
 
             PipelineViewportStateCreateInfo viewportState = new()
@@ -161,7 +161,7 @@ public unsafe class GraphicsPipeline
                 PSetLayouts = descriptorSetLayoutPtr
             };
 
-            if (game.vk!.CreatePipelineLayout(game.device, in pipelineLayoutInfo, null, out pipelineLayout) != Result.Success)
+            if (game.vk!.CreatePipelineLayout(game.renderDevice.device, in pipelineLayoutInfo, null, out pipelineLayout) != Result.Success)
             {
                 throw new Exception("failed to create pipeline layout!");
             }
@@ -184,14 +184,14 @@ public unsafe class GraphicsPipeline
                 BasePipelineHandle = default
             };
 
-            if (game.vk!.CreateGraphicsPipelines(game.device, default, 1, in pipelineInfo, null, out graphicsPipeline) != Result.Success)
+            if (game.vk!.CreateGraphicsPipelines(game.renderDevice.device, default, 1, in pipelineInfo, null, out graphicsPipeline) != Result.Success)
             {
                 throw new Exception("failed to create graphics pipeline!");
             }
         }
 
-        game.vk!.DestroyShaderModule(game.device, fragShaderModule, null);
-        game.vk!.DestroyShaderModule(game.device, vertShaderModule, null);
+        game.vk!.DestroyShaderModule(game.renderDevice.device, fragShaderModule, null);
+        game.vk!.DestroyShaderModule(game.renderDevice.device, vertShaderModule, null);
 
         SilkMarshal.Free((nint)vertShaderStageInfo.PName);
         SilkMarshal.Free((nint)fragShaderStageInfo.PName);
@@ -201,7 +201,7 @@ public unsafe class GraphicsPipeline
     {
         AttachmentDescription colorAttachment = new()
         {
-            Format = game.swapChainImageFormat,
+            Format = game.renderSwapChain.swapChainImageFormat,
             Samples = SampleCountFlags.Count1Bit,
             LoadOp = AttachmentLoadOp.Clear,
             StoreOp = AttachmentStoreOp.Store,
@@ -267,7 +267,7 @@ public unsafe class GraphicsPipeline
                 PDependencies = &dependency,
             };
 
-            if (game.vk!.CreateRenderPass(game.device, in renderPassInfo, null, out renderPass) != Result.Success)
+            if (game.vk!.CreateRenderPass(game.renderDevice.device, in renderPassInfo, null, out renderPass) != Result.Success)
             {
                 throw new Exception("failed to create render pass!");
             }
@@ -306,7 +306,7 @@ public unsafe class GraphicsPipeline
                 PBindings = bindingsPtr,
             };
 
-            if (game.vk!.CreateDescriptorSetLayout(game.device, in layoutInfo, null, descriptorSetLayoutPtr) != Result.Success)
+            if (game.vk!.CreateDescriptorSetLayout(game.renderDevice.device, in layoutInfo, null, descriptorSetLayoutPtr) != Result.Success)
             {
                 throw new Exception("failed to create descriptor set layout!");
             }
