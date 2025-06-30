@@ -99,7 +99,7 @@ public unsafe class Game
 
     void Update(Game game, double delta)
     {
-        var moveSpeed = 2.5f * (float)delta;
+        var moveSpeed = 20f * (float)delta;
 
         if (Input.Instance.IsKeyPressed(Key.W))
         {

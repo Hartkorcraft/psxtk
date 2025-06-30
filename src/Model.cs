@@ -4,7 +4,7 @@ using Buffer = Silk.NET.Vulkan.Buffer;
 
 public unsafe class Model
 {
-    public const string MODEL_PATH = @"Assets\viking_room.obj";
+    public const string MODEL_PATH = @"Assets\cat.obj";
 
     public Buffer vertexBuffer;
     public Buffer indexBuffer;

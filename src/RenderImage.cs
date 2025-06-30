@@ -4,7 +4,7 @@ using Image = Silk.NET.Vulkan.Image;
 
 public unsafe class RenderImage
 {
-    public const string TEXTURE_PATH = @"Assets\viking_room.png";
+    public const string TEXTURE_PATH = @"Assets\cat.jpg";
 
     public Image textureImage;
     public DeviceMemory textureImageMemory;

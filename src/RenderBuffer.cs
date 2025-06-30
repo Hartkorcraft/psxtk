@@ -126,7 +126,7 @@ public unsafe class RenderBuffer
 
         CameraUniform cameraUniform = new()
         {
-            model = Matrix4X4<float>.Identity,
+            model = Matrix4X4<float>.Identity * Matrix4X4.CreateFromAxisAngle<float>(new Vector3D<float>(0, 0, 1), time * Scalar.DegreesToRadians(180.0f)) * Matrix4X4.CreateFromAxisAngle<float>(new Vector3D<float>(-1, 0, 0), 90),
             view = Matrix4X4.CreateLookAt(camera.CameraPosition.To3D(), (camera.CameraPosition + camera.CameraFront).To3D(), camera.CameraUp.To3D()),
             proj = Matrix4X4.CreatePerspectiveFieldOfView(Scalar.DegreesToRadians(camera.CameraZoom), (float)game.renderer.renderSwapChain.swapChainExtent.Width / game.renderer.renderSwapChain.swapChainExtent.Height, 0.1f, 100.0f)
         };
