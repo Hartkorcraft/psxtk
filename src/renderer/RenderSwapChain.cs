@@ -1,20 +1,16 @@
-using System.Runtime.CompilerServices;
-using System.Runtime.InteropServices;
-using Silk.NET.Assimp;
-using Silk.NET.Core;
-using Silk.NET.Core.Native;
 using Silk.NET.Maths;
 using Silk.NET.Vulkan;
-using Silk.NET.Vulkan.Extensions.EXT;
 using Silk.NET.Vulkan.Extensions.KHR;
-using Silk.NET.Windowing;
-using Buffer = Silk.NET.Vulkan.Buffer;
 using Image = Silk.NET.Vulkan.Image;
 using Semaphore = Silk.NET.Vulkan.Semaphore;
 
 public unsafe class RenderSwapChain
 {
     public const int MAX_FRAMES_IN_FLIGHT = 2;
+
+    public Image depthImage;
+    public DeviceMemory depthImageMemory;
+    public ImageView depthImageView;
 
     public KhrSwapchain? khrSwapChain;
     public SwapchainKHR swapChain;
@@ -43,18 +39,18 @@ public unsafe class RenderSwapChain
 
     public void CleanUpSwapChain(Game game)
     {
-        game.vk!.DestroyImageView(game.renderDevice.device, game.depthImageView, null);
-        game.vk!.DestroyImage(game.renderDevice.device, game.depthImage, null);
-        game.vk!.FreeMemory(game.renderDevice.device, game.depthImageMemory, null);
+        game.vk!.DestroyImageView(game.renderDevice.device, depthImageView, null);
+        game.vk!.DestroyImage(game.renderDevice.device, depthImage, null);
+        game.vk!.FreeMemory(game.renderDevice.device, depthImageMemory, null);
 
         foreach (var framebuffer in swapChainFramebuffers!)
         {
             game.vk!.DestroyFramebuffer(game.renderDevice.device, framebuffer, null);
         }
 
-        fixed (CommandBuffer* commandBuffersPtr = game.commands.commandBuffers)
+        fixed (CommandBuffer* commandBuffersPtr = game.renderer.commands.commandBuffers)
         {
-            game.vk!.FreeCommandBuffers(game.renderDevice.device, game.renderDevice.commandPool, (uint)game.commands.commandBuffers!.Length, commandBuffersPtr);
+            game.vk!.FreeCommandBuffers(game.renderDevice.device, game.renderDevice.commandPool, (uint)game.renderer.commands.commandBuffers!.Length, commandBuffersPtr);
         }
 
         game.graphicsPipeline.CleanUp(game);
@@ -68,8 +64,8 @@ public unsafe class RenderSwapChain
 
         for (int i = 0; i < swapChainImages!.Length; i++)
         {
-            game.vk!.DestroyBuffer(game.renderDevice.device, game.uniformBuffers![i], null);
-            game.vk!.FreeMemory(game.renderDevice.device, game.uniformBuffersMemory![i], null);
+            game.vk!.DestroyBuffer(game.renderDevice.device, game.graphicsPipeline.uniformBuffers![i], null);
+            game.vk!.FreeMemory(game.renderDevice.device, game.graphicsPipeline.uniformBuffersMemory![i], null);
         }
 
         game.vk!.DestroyDescriptorPool(game.renderDevice.device, game.descriptors.descriptorPool, null);
@@ -163,7 +159,7 @@ public unsafe class RenderSwapChain
 
         game.vk!.DeviceWaitIdle(game.renderDevice.device);
 
-        game.renderSwapChain.CleanUpSwapChain(game);
+        game.renderer.renderSwapChain.CleanUpSwapChain(game);
 
         CreateSwapChain(game);
         CreateImageViews(game);
@@ -174,7 +170,7 @@ public unsafe class RenderSwapChain
         game.renderBuffer.CreateUniformBuffers(game);
         game.descriptors.CreateDescriptorPool(game);
         game.descriptors.CreateDescriptorSets(game);
-        game.commands.CreateCommandBuffers(game);
+        game.renderer.commands.CreateCommandBuffers(game);
 
         imagesInFlight = new Fence[swapChainImages!.Length];
     }
@@ -272,21 +268,21 @@ public unsafe class RenderSwapChain
 
     public void CreateImageViews(Game game)
     {
-        game.renderSwapChain.swapChainImageViews = new ImageView[game.renderSwapChain.swapChainImages!.Length];
+        game.renderer.renderSwapChain.swapChainImageViews = new ImageView[game.renderer.renderSwapChain.swapChainImages!.Length];
 
-        for (int i = 0; i < game.renderSwapChain.swapChainImages.Length; i++)
+        for (int i = 0; i < game.renderer.renderSwapChain.swapChainImages.Length; i++)
         {
-            game.renderSwapChain.swapChainImageViews[i] = game.renderImage.CreateImageView(game, game.renderSwapChain.swapChainImages[i], game.renderSwapChain.swapChainImageFormat, ImageAspectFlags.ColorBit, 1);
+            game.renderer.renderSwapChain.swapChainImageViews[i] = game.renderImage.CreateImageView(game, game.renderer.renderSwapChain.swapChainImages[i], game.renderer.renderSwapChain.swapChainImageFormat, ImageAspectFlags.ColorBit, 1);
         }
     }
 
     public void CreateFramebuffers(Game game)
     {
-        game.renderSwapChain.swapChainFramebuffers = new Framebuffer[game.renderSwapChain.swapChainImageViews!.Length];
+        game.renderer.renderSwapChain.swapChainFramebuffers = new Framebuffer[game.renderer.renderSwapChain.swapChainImageViews!.Length];
 
-        for (int i = 0; i < game.renderSwapChain.swapChainImageViews.Length; i++)
+        for (int i = 0; i < game.renderer.renderSwapChain.swapChainImageViews.Length; i++)
         {
-            var attachments = new[] { game.renderSwapChain.swapChainImageViews[i], game.depthImageView };
+            var attachments = new[] { game.renderer.renderSwapChain.swapChainImageViews[i], depthImageView };
 
             fixed (ImageView* attachmentsPtr = attachments)
             {
@@ -296,12 +292,12 @@ public unsafe class RenderSwapChain
                     RenderPass = game.graphicsPipeline.renderPass,
                     AttachmentCount = (uint)attachments.Length,
                     PAttachments = attachmentsPtr,
-                    Width = game.renderSwapChain.swapChainExtent.Width,
-                    Height = game.renderSwapChain.swapChainExtent.Height,
+                    Width = game.renderer.renderSwapChain.swapChainExtent.Width,
+                    Height = game.renderer.renderSwapChain.swapChainExtent.Height,
                     Layers = 1,
                 };
 
-                if (game.vk!.CreateFramebuffer(game.renderDevice.device, in framebufferInfo, null, out game.renderSwapChain.swapChainFramebuffers[i]) != Result.Success)
+                if (game.vk!.CreateFramebuffer(game.renderDevice.device, in framebufferInfo, null, out game.renderer.renderSwapChain.swapChainFramebuffers[i]) != Result.Success)
                 {
                     throw new Exception("failed to create framebuffer!");
                 }
@@ -314,7 +310,7 @@ public unsafe class RenderSwapChain
         imageAvailableSemaphores = new Semaphore[MAX_FRAMES_IN_FLIGHT];
         renderFinishedSemaphores = new Semaphore[MAX_FRAMES_IN_FLIGHT];
         inFlightFences = new Fence[MAX_FRAMES_IN_FLIGHT];
-        imagesInFlight = new Fence[game.renderSwapChain.swapChainImages!.Length];
+        imagesInFlight = new Fence[game.renderer.renderSwapChain.swapChainImages!.Length];
 
         SemaphoreCreateInfo semaphoreInfo = new()
         {

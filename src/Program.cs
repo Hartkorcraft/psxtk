@@ -1,33 +1,13 @@
-﻿using System.Runtime.CompilerServices;
-using System.Runtime.InteropServices;
-using Silk.NET.Assimp;
-using Silk.NET.Core;
-using Silk.NET.Core.Native;
-using Silk.NET.Maths;
+﻿using Silk.NET.Maths;
 using Silk.NET.Vulkan;
-using Silk.NET.Vulkan.Extensions.EXT;
 using Silk.NET.Vulkan.Extensions.KHR;
-using Silk.NET.Windowing;
 using Buffer = Silk.NET.Vulkan.Buffer;
-using Image = Silk.NET.Vulkan.Image;
-using Semaphore = Silk.NET.Vulkan.Semaphore;
 
 var app = new Game();
 app.Run();
 
 public unsafe class Game
 {
-
-    // public const string TEXTURE_PATH = @"Assets\viking_room.png";
-
-
-    // public bool enableValidationLayers = true;
-
-    // public readonly string[] validationLayers =
-    // [
-    //     "VK_LAYER_KHRONOS_validation"
-    // ];
-
     public readonly string[] deviceExtensions =
     [
         KhrSwapchain.ExtensionName
@@ -44,15 +24,9 @@ public unsafe class Game
 
     public RenderDevice renderDevice = new();
 
-    public Queue graphicsQueue;
-    public Queue presentQueue;
-
     public GraphicsPipeline graphicsPipeline = new();
-    public RenderSwapChain renderSwapChain = new();
 
-    public Image depthImage;
-    public DeviceMemory depthImageMemory;
-    public ImageView depthImageView;
+    public Renderer renderer = new();
 
     public RenderImage renderImage = new();
     public ImageSampler imageSampler = new();
@@ -60,19 +34,22 @@ public unsafe class Game
     public Buffer vertexBuffer;
     public Buffer indexBuffer;
 
-
     public RenderBuffer renderBuffer = new();
-
-    public Buffer[]? uniformBuffers;
-    public DeviceMemory[]? uniformBuffersMemory;
 
     public Descriptors descriptors = new();
 
-    public Commands commands = new();
-
-
 
     public Model model = new();
+
+    public Camera camera = new(
+        eye: new(0, 1, 2),
+        target: new(0, 0, 0),
+        up: Vector3D<float>.UnitY,
+        aspect: GameWindow.WIDTH / GameWindow.HEIGHT,
+        fovy: 45,
+        znear: 0.1f,
+        zfar: 100.0f
+    );
 
     public void Run()
     {
@@ -84,47 +61,42 @@ public unsafe class Game
 
     public void InitVulkan()
     {
-        graphicsInstance.CreateInstance(this);
+        graphicsInstance.Init(this);
 
-        debugTools.SetupDebugMessenger(this);
+        debugTools.Init(this);
 
-        graphicsSurface.CreateSurface(this);
+        graphicsSurface.Init(this);
 
-        renderDevice.PickPhysicalDevice(this);
-        renderDevice.CreateLogicalDevice(this);
+        renderDevice.Init(this);
 
-        renderSwapChain.CreateSwapChain(this);
-        renderSwapChain.CreateImageViews(this);
+        renderer.renderSwapChain.CreateSwapChain(this);
+        renderer.renderSwapChain.CreateImageViews(this);
 
         graphicsPipeline.Init(this);
 
-        renderDevice.CreateCommandPool(this);
-
-
-        renderSwapChain.CreateFramebuffers(this);
+        renderer.renderSwapChain.CreateFramebuffers(this);
 
         renderImage.CreateTextureImage(this);
         renderImage.CreateTextureImageView(this);
 
-        imageSampler.CreateTextureSampler(this);
+        imageSampler.Init(this);
 
-        model.LoadModel(this);
+        model.Init(this);
 
         renderBuffer.CreateVertexBuffer(this);
         renderBuffer.CreateIndexBuffer(this);
         renderBuffer.CreateUniformBuffers(this);
 
-        descriptors.CreateDescriptorPool(this);
-        descriptors.CreateDescriptorSets(this);
+        descriptors.Init(this);
 
-        commands.CreateCommandBuffers(this);
+        renderer.commands.CreateCommandBuffers(this);
 
-        renderSwapChain.CreateSyncObjects(this);
+        renderer.renderSwapChain.CreateSyncObjects(this);
     }
 
     public void MainLoop()
     {
-        graphicsPipeline.InitRenderLoop(this);
+        renderer.InitRenderLoop(this);
         gameWindow.Run();
         vk!.DeviceWaitIdle(renderDevice.device);
     }
@@ -146,7 +118,7 @@ public unsafe class Game
         descriptors.Destroy(this);
         DestroyBuffers();
 
-        renderSwapChain.Destroy(this);
+        renderer.renderSwapChain.Destroy(this);
 
         renderDevice.Destroy(this);
 

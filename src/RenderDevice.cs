@@ -1,16 +1,7 @@
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
-using Silk.NET.Assimp;
-using Silk.NET.Core;
 using Silk.NET.Core.Native;
-using Silk.NET.Maths;
 using Silk.NET.Vulkan;
-using Silk.NET.Vulkan.Extensions.EXT;
-using Silk.NET.Vulkan.Extensions.KHR;
-using Silk.NET.Windowing;
-using Buffer = Silk.NET.Vulkan.Buffer;
-using Image = Silk.NET.Vulkan.Image;
-using Semaphore = Silk.NET.Vulkan.Semaphore;
 
 public unsafe class RenderDevice
 {
@@ -18,10 +9,20 @@ public unsafe class RenderDevice
     public Device device;
     public CommandPool commandPool;
 
+    public Queue graphicsQueue;
+    public Queue presentQueue;
+
     public void Destroy(Game game)
     {
         game.vk!.DestroyCommandPool(device, commandPool, null);
         game.vk!.DestroyDevice(device, null);
+    }
+
+    public void Init(Game game)
+    {
+        PickPhysicalDevice(game);
+        CreateLogicalDevice(game);
+        CreateCommandPool(game);
     }
 
     public void PickPhysicalDevice(Game game)
@@ -98,8 +99,8 @@ public unsafe class RenderDevice
             throw new Exception("failed to create logical device!");
         }
 
-        game.vk!.GetDeviceQueue(device, indices.GraphicsFamily!.Value, 0, out game.graphicsQueue);
-        game.vk!.GetDeviceQueue(device, indices.PresentFamily!.Value, 0, out game.presentQueue);
+        game.vk!.GetDeviceQueue(device, indices.GraphicsFamily!.Value, 0, out graphicsQueue);
+        game.vk!.GetDeviceQueue(device, indices.PresentFamily!.Value, 0, out presentQueue);
 
         if (game.debugTools.enableValidationLayers)
         {
@@ -118,7 +119,7 @@ public unsafe class RenderDevice
         bool swapChainAdequate = false;
         if (extensionsSupported)
         {
-            var swapChainSupport = game.renderSwapChain.QuerySwapChainSupport(game, device);
+            var swapChainSupport = game.renderer.renderSwapChain.QuerySwapChainSupport(game, device);
             swapChainAdequate = swapChainSupport.Formats.Any() && swapChainSupport.PresentModes.Any();
         }
 

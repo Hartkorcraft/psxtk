@@ -1,24 +1,14 @@
-using System.Runtime.CompilerServices;
-using System.Runtime.InteropServices;
-using Silk.NET.Assimp;
-using Silk.NET.Core;
-using Silk.NET.Core.Native;
-using Silk.NET.Maths;
 using Silk.NET.Vulkan;
-using Silk.NET.Vulkan.Extensions.EXT;
-using Silk.NET.Vulkan.Extensions.KHR;
-using Silk.NET.Windowing;
 using Buffer = Silk.NET.Vulkan.Buffer;
-using Image = Silk.NET.Vulkan.Image;
-using Semaphore = Silk.NET.Vulkan.Semaphore;
 
 public unsafe class Commands
 {
     public CommandBuffer[]? commandBuffers;
+    public bool IsFrameStarted { get; private set; }
 
     public void CreateCommandBuffers(Game game)
     {
-        commandBuffers = new CommandBuffer[game.renderSwapChain.swapChainFramebuffers!.Length];
+        commandBuffers = new CommandBuffer[game.renderer.renderSwapChain.swapChainFramebuffers!.Length];
 
         CommandBufferAllocateInfo allocInfo = new()
         {
@@ -53,11 +43,11 @@ public unsafe class Commands
             {
                 SType = StructureType.RenderPassBeginInfo,
                 RenderPass = game.graphicsPipeline.renderPass,
-                Framebuffer = game.renderSwapChain.swapChainFramebuffers[i],
+                Framebuffer = game.renderer.renderSwapChain.swapChainFramebuffers[i],
                 RenderArea =
                 {
                     Offset = { X = 0, Y = 0 },
-                    Extent = game.renderSwapChain.swapChainExtent,
+                    Extent = game.renderer.renderSwapChain.swapChainExtent,
                 }
             };
 
@@ -110,6 +100,7 @@ public unsafe class Commands
 
     public CommandBuffer BeginSingleTimeCommands(Game game)
     {
+        IsFrameStarted = true;
         CommandBufferAllocateInfo allocateInfo = new()
         {
             SType = StructureType.CommandBufferAllocateInfo,
@@ -142,9 +133,11 @@ public unsafe class Commands
             PCommandBuffers = &commandBuffer,
         };
 
-        game.vk!.QueueSubmit(game.graphicsQueue, 1, in submitInfo, default);
-        game.vk!.QueueWaitIdle(game.graphicsQueue);
+        game.vk!.QueueSubmit(game.renderDevice.graphicsQueue, 1, in submitInfo, default);
+        game.vk!.QueueWaitIdle(game.renderDevice.graphicsQueue);
 
         game.vk!.FreeCommandBuffers(game.renderDevice.device, game.renderDevice.commandPool, 1, in commandBuffer);
+
+        IsFrameStarted = false;
     }
 }

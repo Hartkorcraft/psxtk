@@ -1,27 +1,22 @@
 using System.Runtime.CompilerServices;
-using System.Runtime.InteropServices;
-using Silk.NET.Assimp;
-using Silk.NET.Core;
-using Silk.NET.Core.Native;
-using Silk.NET.Maths;
 using Silk.NET.Vulkan;
-using Silk.NET.Vulkan.Extensions.EXT;
-using Silk.NET.Vulkan.Extensions.KHR;
-using Silk.NET.Windowing;
-using Buffer = Silk.NET.Vulkan.Buffer;
-using Image = Silk.NET.Vulkan.Image;
-using Semaphore = Silk.NET.Vulkan.Semaphore;
 
 public unsafe class Descriptors
 {
     public DescriptorPool descriptorPool;
     public DescriptorSet[]? descriptorSets;
 
+    public void Init(Game game)
+    {
+        CreateDescriptorPool(game);
+        CreateDescriptorSets(game);
+    }
+
     public void Destroy(Game game)
     {
         game.vk!.DestroyDescriptorSetLayout(game.renderDevice.device, game.graphicsPipeline.descriptorSetLayout, null);
     }
-    
+
     public void CreateDescriptorPool(Game game)
     {
         var poolSizes = new DescriptorPoolSize[]
@@ -29,12 +24,12 @@ public unsafe class Descriptors
             new DescriptorPoolSize()
             {
                 Type = DescriptorType.UniformBuffer,
-                DescriptorCount = (uint)game.renderSwapChain.swapChainImages!.Length,
+                DescriptorCount = (uint)game.renderer.renderSwapChain.swapChainImages!.Length,
             },
             new DescriptorPoolSize()
             {
                 Type = DescriptorType.CombinedImageSampler,
-                DescriptorCount = (uint)game.renderSwapChain.swapChainImages!.Length,
+                DescriptorCount = (uint)game.renderer.renderSwapChain.swapChainImages!.Length,
             }
         };
 
@@ -47,7 +42,7 @@ public unsafe class Descriptors
                 SType = StructureType.DescriptorPoolCreateInfo,
                 PoolSizeCount = (uint)poolSizes.Length,
                 PPoolSizes = poolSizesPtr,
-                MaxSets = (uint)game.renderSwapChain.swapChainImages!.Length,
+                MaxSets = (uint)game.renderer.renderSwapChain.swapChainImages!.Length,
             };
 
             if (game.vk!.CreateDescriptorPool(game.renderDevice.device, in poolInfo, null, descriptorPoolPtr) != Result.Success)
@@ -60,7 +55,7 @@ public unsafe class Descriptors
 
     public void CreateDescriptorSets(Game game)
     {
-        var layouts = new DescriptorSetLayout[game.renderSwapChain.swapChainImages!.Length];
+        var layouts = new DescriptorSetLayout[game.renderer.renderSwapChain.swapChainImages!.Length];
         Array.Fill(layouts, game.graphicsPipeline.descriptorSetLayout);
 
         fixed (DescriptorSetLayout* layoutsPtr = layouts)
@@ -69,11 +64,11 @@ public unsafe class Descriptors
             {
                 SType = StructureType.DescriptorSetAllocateInfo,
                 DescriptorPool = descriptorPool,
-                DescriptorSetCount = (uint)game.renderSwapChain.swapChainImages!.Length,
+                DescriptorSetCount = (uint)game.renderer.renderSwapChain.swapChainImages!.Length,
                 PSetLayouts = layoutsPtr,
             };
 
-            descriptorSets = new DescriptorSet[game.renderSwapChain.swapChainImages.Length];
+            descriptorSets = new DescriptorSet[game.renderer.renderSwapChain.swapChainImages.Length];
             fixed (DescriptorSet* descriptorSetsPtr = descriptorSets)
             {
                 if (game.vk!.AllocateDescriptorSets(game.renderDevice.device, in allocateInfo, descriptorSetsPtr) != Result.Success)
@@ -83,11 +78,11 @@ public unsafe class Descriptors
             }
         }
 
-        for (int i = 0; i < game.renderSwapChain.swapChainImages.Length; i++)
+        for (int i = 0; i < game.renderer.renderSwapChain.swapChainImages.Length; i++)
         {
             DescriptorBufferInfo bufferInfo = new()
             {
-                Buffer = game.uniformBuffers![i],
+                Buffer = game.graphicsPipeline. uniformBuffers![i],
                 Offset = 0,
                 Range = (ulong)Unsafe.SizeOf<UniformBufferObject>(),
 

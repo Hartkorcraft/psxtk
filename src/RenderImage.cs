@@ -1,16 +1,6 @@
-using System.Runtime.CompilerServices;
-using System.Runtime.InteropServices;
-using Silk.NET.Assimp;
-using Silk.NET.Core;
-using Silk.NET.Core.Native;
-using Silk.NET.Maths;
 using Silk.NET.Vulkan;
-using Silk.NET.Vulkan.Extensions.EXT;
-using Silk.NET.Vulkan.Extensions.KHR;
-using Silk.NET.Windowing;
 using Buffer = Silk.NET.Vulkan.Buffer;
 using Image = Silk.NET.Vulkan.Image;
-using Semaphore = Silk.NET.Vulkan.Semaphore;
 
 public unsafe class RenderImage
 {
@@ -113,7 +103,7 @@ public unsafe class RenderImage
 
     public void TransitionImageLayout(Game game, Image image, Format format, ImageLayout oldLayout, ImageLayout newLayout, uint mipLevels)
     {
-        var commandBuffer = game.commands.BeginSingleTimeCommands(game);
+        var commandBuffer = game.renderer.commands.BeginSingleTimeCommands(game);
 
         ImageMemoryBarrier barrier = new()
         {
@@ -159,7 +149,7 @@ public unsafe class RenderImage
 
         game.vk!.CmdPipelineBarrier(commandBuffer, sourceStage, destinationStage, 0, 0, null, 0, null, 1, in barrier);
 
-        game.commands.EndSingleTimeCommands(game, commandBuffer);
+        game.renderer.commands.EndSingleTimeCommands(game, commandBuffer);
     }
 
     public void CreateTextureImageView(Game game)
@@ -204,7 +194,7 @@ public unsafe class RenderImage
             throw new Exception("texture image format does not support linear blitting!");
         }
 
-        var commandBuffer = game.commands.BeginSingleTimeCommands(game);
+        var commandBuffer = game.renderer.commands.BeginSingleTimeCommands(game);
 
         ImageMemoryBarrier barrier = new()
         {
@@ -297,7 +287,7 @@ public unsafe class RenderImage
               0, null,
               1, in barrier);
 
-        game.commands.EndSingleTimeCommands(game, commandBuffer);
+        game.renderer.commands.EndSingleTimeCommands(game, commandBuffer);
     }
 
 }

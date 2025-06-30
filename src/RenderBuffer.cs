@@ -1,16 +1,8 @@
 using System.Runtime.CompilerServices;
-using System.Runtime.InteropServices;
-using Silk.NET.Assimp;
-using Silk.NET.Core;
-using Silk.NET.Core.Native;
 using Silk.NET.Maths;
 using Silk.NET.Vulkan;
-using Silk.NET.Vulkan.Extensions.EXT;
-using Silk.NET.Vulkan.Extensions.KHR;
-using Silk.NET.Windowing;
 using Buffer = Silk.NET.Vulkan.Buffer;
 using Image = Silk.NET.Vulkan.Image;
-using Semaphore = Silk.NET.Vulkan.Semaphore;
 
 public unsafe class RenderBuffer
 {
@@ -102,19 +94,19 @@ public unsafe class RenderBuffer
     {
         ulong bufferSize = (ulong)Unsafe.SizeOf<UniformBufferObject>();
 
-        game.uniformBuffers = new Buffer[game.renderSwapChain.swapChainImages!.Length];
-        game.uniformBuffersMemory = new DeviceMemory[game.renderSwapChain.swapChainImages!.Length];
+        game.graphicsPipeline.uniformBuffers = new Buffer[game.renderer.renderSwapChain.swapChainImages!.Length];
+        game.graphicsPipeline.uniformBuffersMemory = new DeviceMemory[game.renderer.renderSwapChain.swapChainImages!.Length];
 
-        for (int i = 0; i < game.renderSwapChain.swapChainImages.Length; i++)
+        for (int i = 0; i < game.renderer.renderSwapChain.swapChainImages.Length; i++)
         {
-            CreateBuffer(game, bufferSize, BufferUsageFlags.UniformBufferBit, MemoryPropertyFlags.HostVisibleBit | MemoryPropertyFlags.HostCoherentBit, ref game.uniformBuffers[i], ref game.uniformBuffersMemory[i]);
+            CreateBuffer(game, bufferSize, BufferUsageFlags.UniformBufferBit, MemoryPropertyFlags.HostVisibleBit | MemoryPropertyFlags.HostCoherentBit, ref game.graphicsPipeline.uniformBuffers[i], ref game.graphicsPipeline.uniformBuffersMemory[i]);
         }
 
     }
 
     public void CopyBuffer(Game game, Buffer srcBuffer, Buffer dstBuffer, ulong size)
     {
-        var commandBuffer = game.commands.BeginSingleTimeCommands(game);
+        var commandBuffer = game.renderer.commands.BeginSingleTimeCommands(game);
 
         BufferCopy copyRegion = new()
         {
@@ -123,7 +115,7 @@ public unsafe class RenderBuffer
 
         game.vk!.CmdCopyBuffer(commandBuffer, srcBuffer, dstBuffer, 1, in copyRegion);
 
-        game.commands.EndSingleTimeCommands(game, commandBuffer);
+        game.renderer.commands.EndSingleTimeCommands(game, commandBuffer);
     }
 
     public void UpdateUniformBuffer(Game game, uint currentImage)
@@ -135,19 +127,19 @@ public unsafe class RenderBuffer
         {
             model = Matrix4X4<float>.Identity * Matrix4X4.CreateFromAxisAngle<float>(new Vector3D<float>(0, 0, 1), time * Scalar.DegreesToRadians(90.0f)),
             view = Matrix4X4.CreateLookAt(new Vector3D<float>(2, 2, 2), new Vector3D<float>(0, 0, 0), new Vector3D<float>(0, 0, 1)),
-            proj = Matrix4X4.CreatePerspectiveFieldOfView(Scalar.DegreesToRadians(45.0f), (float)game.renderSwapChain.swapChainExtent.Width / game.renderSwapChain.swapChainExtent.Height, 0.1f, 10.0f),
+            proj = Matrix4X4.CreatePerspectiveFieldOfView(Scalar.DegreesToRadians(45.0f), (float)game.renderer.renderSwapChain.swapChainExtent.Width / game.renderer.renderSwapChain.swapChainExtent.Height, 0.1f, 10.0f),
         };
         ubo.proj.M22 *= -1;
 
         void* data;
-        game.vk!.MapMemory(game.renderDevice.device, game.uniformBuffersMemory![currentImage], 0, (ulong)Unsafe.SizeOf<UniformBufferObject>(), 0, &data);
+        game.vk!.MapMemory(game.renderDevice.device, game.graphicsPipeline.uniformBuffersMemory![currentImage], 0, (ulong)Unsafe.SizeOf<UniformBufferObject>(), 0, &data);
         new Span<UniformBufferObject>(data, 1)[0] = ubo;
-        game.vk!.UnmapMemory(game.renderDevice.device, game.uniformBuffersMemory![currentImage]);
+        game.vk!.UnmapMemory(game.renderDevice.device, game.graphicsPipeline.uniformBuffersMemory![currentImage]);
     }
 
     public void CopyBufferToImage(Game game, Buffer buffer, Image image, uint width, uint height)
     {
-        var commandBuffer = game.commands.BeginSingleTimeCommands(game);
+        var commandBuffer = game.renderer.commands.BeginSingleTimeCommands(game);
 
         BufferImageCopy region = new()
         {
@@ -168,7 +160,7 @@ public unsafe class RenderBuffer
 
         game.vk!.CmdCopyBufferToImage(commandBuffer, buffer, image, ImageLayout.TransferDstOptimal, 1, in region);
 
-        game.commands.EndSingleTimeCommands(game, commandBuffer);
+        game.renderer.commands.EndSingleTimeCommands(game, commandBuffer);
     }
 
 }

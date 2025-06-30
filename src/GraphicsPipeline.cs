@@ -1,16 +1,6 @@
-using System.Runtime.CompilerServices;
-using System.Runtime.InteropServices;
-using Silk.NET.Assimp;
-using Silk.NET.Core;
 using Silk.NET.Core.Native;
-using Silk.NET.Maths;
 using Silk.NET.Vulkan;
-using Silk.NET.Vulkan.Extensions.EXT;
-using Silk.NET.Vulkan.Extensions.KHR;
-using Silk.NET.Windowing;
 using Buffer = Silk.NET.Vulkan.Buffer;
-using Image = Silk.NET.Vulkan.Image;
-using Semaphore = Silk.NET.Vulkan.Semaphore;
 
 public unsafe class GraphicsPipeline
 {
@@ -18,6 +8,9 @@ public unsafe class GraphicsPipeline
     public RenderPass renderPass;
     public DescriptorSetLayout descriptorSetLayout;
     public PipelineLayout pipelineLayout;
+
+    public Buffer[]? uniformBuffers;
+    public DeviceMemory[]? uniformBuffersMemory;
 
     public void Init(Game game)
     {
@@ -34,10 +27,7 @@ public unsafe class GraphicsPipeline
         game.vk!.DestroyRenderPass(game.renderDevice.device, renderPass, null);
     }
 
-    public void InitRenderLoop(Game game)
-    {
-        game.gameWindow.window!.Render += (delta) => DrawFrame(game, delta);
-    }
+
 
     public void CreateGraphicsPipeline(Game game)
     {
@@ -96,8 +86,8 @@ public unsafe class GraphicsPipeline
             {
                 X = 0,
                 Y = 0,
-                Width = game.renderSwapChain.swapChainExtent.Width,
-                Height = game.renderSwapChain.swapChainExtent.Height,
+                Width = game.renderer.renderSwapChain.swapChainExtent.Width,
+                Height = game.renderer.renderSwapChain.swapChainExtent.Height,
                 MinDepth = 0,
                 MaxDepth = 1,
             };
@@ -105,7 +95,7 @@ public unsafe class GraphicsPipeline
             Rect2D scissor = new()
             {
                 Offset = { X = 0, Y = 0 },
-                Extent = game.renderSwapChain.swapChainExtent,
+                Extent = game.renderer.renderSwapChain.swapChainExtent,
             };
 
             PipelineViewportStateCreateInfo viewportState = new()
@@ -214,7 +204,7 @@ public unsafe class GraphicsPipeline
     {
         AttachmentDescription colorAttachment = new()
         {
-            Format = game.renderSwapChain.swapChainImageFormat,
+            Format = game.renderer.renderSwapChain.swapChainImageFormat,
             Samples = SampleCountFlags.Count1Bit,
             LoadOp = AttachmentLoadOp.Clear,
             StoreOp = AttachmentStoreOp.Store,
@@ -326,93 +316,7 @@ public unsafe class GraphicsPipeline
         }
     }
 
-    void DrawFrame(Game game, double delta)
-    {
-        game.vk!.WaitForFences(game.renderDevice.device, 1, in game.renderSwapChain.inFlightFences![game.renderSwapChain.currentFrame], true, ulong.MaxValue);
-
-        uint imageIndex = 0;
-        var result = game.renderSwapChain.khrSwapChain!.AcquireNextImage(game.renderDevice.device, game.renderSwapChain.swapChain, ulong.MaxValue, game.renderSwapChain.imageAvailableSemaphores![game.renderSwapChain.currentFrame], default, ref imageIndex);
-
-        if (result == Result.ErrorOutOfDateKhr)
-        {
-            game.renderSwapChain.RecreateSwapChain(game);
-            return;
-        }
-        else if (result != Result.Success && result != Result.SuboptimalKhr)
-        {
-            throw new Exception("failed to acquire swap chain image!");
-        }
-
-        game.renderBuffer.UpdateUniformBuffer(game, imageIndex);
-
-        if (game.renderSwapChain.imagesInFlight![imageIndex].Handle != default)
-        {
-            game.vk!.WaitForFences(game.renderDevice.device, 1, in game.renderSwapChain.imagesInFlight[imageIndex], true, ulong.MaxValue);
-        }
-        game.renderSwapChain.imagesInFlight[imageIndex] = game.renderSwapChain.inFlightFences[game.renderSwapChain.currentFrame];
-
-        SubmitInfo submitInfo = new()
-        {
-            SType = StructureType.SubmitInfo,
-        };
-
-        var waitSemaphores = stackalloc[] { game.renderSwapChain.imageAvailableSemaphores[game.renderSwapChain.currentFrame] };
-        var waitStages = stackalloc[] { PipelineStageFlags.ColorAttachmentOutputBit };
-
-        var commandsBuffer = game.commands.commandBuffers![imageIndex];
-
-        submitInfo = submitInfo with
-        {
-            WaitSemaphoreCount = 1,
-            PWaitSemaphores = waitSemaphores,
-            PWaitDstStageMask = waitStages,
-
-            CommandBufferCount = 1,
-            PCommandBuffers = &commandsBuffer
-        };
-
-        var signalSemaphores = stackalloc[] { game.renderSwapChain.renderFinishedSemaphores![game.renderSwapChain.currentFrame] };
-        submitInfo = submitInfo with
-        {
-            SignalSemaphoreCount = 1,
-            PSignalSemaphores = signalSemaphores,
-        };
-
-        game.vk!.ResetFences(game.renderDevice.device, 1, in game.renderSwapChain.inFlightFences[game.renderSwapChain.currentFrame]);
-
-        if (game.vk!.QueueSubmit(game.graphicsQueue, 1, in submitInfo, game.renderSwapChain.inFlightFences[game.renderSwapChain.currentFrame]) != Result.Success)
-        {
-            throw new Exception("failed to submit draw command buffer!");
-        }
-
-        var swapChains = stackalloc[] { game.renderSwapChain.swapChain };
-        PresentInfoKHR presentInfo = new()
-        {
-            SType = StructureType.PresentInfoKhr,
-
-            WaitSemaphoreCount = 1,
-            PWaitSemaphores = signalSemaphores,
-
-            SwapchainCount = 1,
-            PSwapchains = swapChains,
-
-            PImageIndices = &imageIndex
-        };
-
-        result = game.renderSwapChain.khrSwapChain.QueuePresent(game.presentQueue, in presentInfo);
-
-        if (result == Result.ErrorOutOfDateKhr || result == Result.SuboptimalKhr || game.gameWindow.frameBufferResized)
-        {
-            game.gameWindow.frameBufferResized = false;
-            game.renderSwapChain.RecreateSwapChain(game);
-        }
-        else if (result != Result.Success)
-        {
-            throw new Exception("failed to present swap chain image!");
-        }
-
-        game.renderSwapChain.currentFrame = (game.renderSwapChain.currentFrame + 1) % RenderSwapChain.MAX_FRAMES_IN_FLIGHT;
-    }
+   
 
     public ShaderModule CreateShaderModule(Game game, byte[] code)
     {
@@ -440,8 +344,8 @@ public unsafe class GraphicsPipeline
     {
         Format depthFormat = FindDepthFormat(game);
 
-        game.renderImage.CreateImage(game, game.renderSwapChain.swapChainExtent.Width, game.renderSwapChain.swapChainExtent.Height, 1, depthFormat, ImageTiling.Optimal, ImageUsageFlags.DepthStencilAttachmentBit, MemoryPropertyFlags.DeviceLocalBit, ref game.depthImage, ref game.depthImageMemory);
-        game.depthImageView = game.renderImage.CreateImageView(game, game.depthImage, depthFormat, ImageAspectFlags.DepthBit, 1);
+        game.renderImage.CreateImage(game, game.renderer.renderSwapChain.swapChainExtent.Width, game.renderer.renderSwapChain.swapChainExtent.Height, 1, depthFormat, ImageTiling.Optimal, ImageUsageFlags.DepthStencilAttachmentBit, MemoryPropertyFlags.DeviceLocalBit, ref game.renderer.renderSwapChain.depthImage, ref game.renderer.renderSwapChain.depthImageMemory);
+        game.renderer.renderSwapChain.depthImageView = game.renderImage.CreateImageView(game, game.renderer.renderSwapChain.depthImage, depthFormat, ImageAspectFlags.DepthBit, 1);
     }
 
     public Format FindSupportedFormat(Game game, IEnumerable<Format> candidates, ImageTiling tiling, FormatFeatureFlags features)
