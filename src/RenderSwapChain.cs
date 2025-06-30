@@ -74,7 +74,7 @@ public unsafe class RenderSwapChain
         SwapchainCreateInfoKHR creatInfo = new()
         {
             SType = StructureType.SwapchainCreateInfoKhr,
-            Surface = game.surface,
+            Surface = game.graphicsSurface.surface,
 
             MinImageCount = imageCount,
             ImageFormat = surfaceFormat.Format,

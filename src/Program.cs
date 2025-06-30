@@ -44,8 +44,10 @@ public unsafe class Game
 
     public ExtDebugUtils? debugUtils;
     public DebugUtilsMessengerEXT debugMessenger;
-    public KhrSurface? khrSurface;
-    public SurfaceKHR surface;
+
+    public GraphicsSurface graphicsSurface = new GraphicsSurface();
+    // public KhrSurface? khrSurface;
+    // public SurfaceKHR surface;
 
     public RenderDevice renderDevice = new();
     // public PhysicalDevice physicalDevice;
@@ -135,7 +137,7 @@ public unsafe class Game
     {
         CreateInstance();
         SetupDebugMessenger();
-        CreateSurface();
+        graphicsSurface.CreateSurface(this);
         renderDevice.PickPhysicalDevice(this);
         renderDevice.CreateLogicalDevice(this);
         renderSwapChain.CreateSwapChain(this);
@@ -201,7 +203,7 @@ public unsafe class Game
             debugUtils!.DestroyDebugUtilsMessenger(instance, debugMessenger, null);
         }
 
-        khrSurface!.DestroySurface(instance, surface, null);
+        graphicsSurface.khrSurface!.DestroySurface(instance, graphicsSurface.surface, null);
         vk!.DestroyInstance(instance, null);
         vk!.Dispose();
 
@@ -293,16 +295,6 @@ public unsafe class Game
         {
             throw new Exception("failed to set up debug messenger!");
         }
-    }
-
-    public void CreateSurface()
-    {
-        if (!vk!.TryGetInstanceExtension<KhrSurface>(instance, out khrSurface))
-        {
-            throw new NotSupportedException("KHR_surface extension not found.");
-        }
-
-        surface = window!.VkSurface!.Create<AllocationCallbacks>(instance.ToHandle(), null).ToSurface();
     }
 
     public void CreateImageViews()
@@ -1374,17 +1366,17 @@ public unsafe class Game
     {
         var details = new SwapChainSupportDetails();
 
-        khrSurface!.GetPhysicalDeviceSurfaceCapabilities(physicalDevice, surface, out details.Capabilities);
+        graphicsSurface.khrSurface!.GetPhysicalDeviceSurfaceCapabilities(physicalDevice, graphicsSurface.surface, out details.Capabilities);
 
         uint formatCount = 0;
-        khrSurface.GetPhysicalDeviceSurfaceFormats(physicalDevice, surface, ref formatCount, null);
+        graphicsSurface.khrSurface.GetPhysicalDeviceSurfaceFormats(physicalDevice, graphicsSurface.surface, ref formatCount, null);
 
         if (formatCount != 0)
         {
             details.Formats = new SurfaceFormatKHR[formatCount];
             fixed (SurfaceFormatKHR* formatsPtr = details.Formats)
             {
-                khrSurface.GetPhysicalDeviceSurfaceFormats(physicalDevice, surface, ref formatCount, formatsPtr);
+                graphicsSurface.khrSurface.GetPhysicalDeviceSurfaceFormats(physicalDevice, graphicsSurface.surface, ref formatCount, formatsPtr);
             }
         }
         else
@@ -1393,14 +1385,14 @@ public unsafe class Game
         }
 
         uint presentModeCount = 0;
-        khrSurface.GetPhysicalDeviceSurfacePresentModes(physicalDevice, surface, ref presentModeCount, null);
+        graphicsSurface.khrSurface.GetPhysicalDeviceSurfacePresentModes(physicalDevice, graphicsSurface.surface, ref presentModeCount, null);
 
         if (presentModeCount != 0)
         {
             details.PresentModes = new PresentModeKHR[presentModeCount];
             fixed (PresentModeKHR* formatsPtr = details.PresentModes)
             {
-                khrSurface.GetPhysicalDeviceSurfacePresentModes(physicalDevice, surface, ref presentModeCount, formatsPtr);
+                graphicsSurface.khrSurface.GetPhysicalDeviceSurfacePresentModes(physicalDevice, graphicsSurface.surface, ref presentModeCount, formatsPtr);
             }
 
         }
@@ -1469,7 +1461,7 @@ public unsafe class Game
                 indices.GraphicsFamily = i;
             }
 
-            khrSurface!.GetPhysicalDeviceSurfaceSupport(device, i, surface, out var presentSupport);
+            graphicsSurface.khrSurface!.GetPhysicalDeviceSurfaceSupport(device, i, graphicsSurface.surface, out var presentSupport);
 
             if (presentSupport)
             {
